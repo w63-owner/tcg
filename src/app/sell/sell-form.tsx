@@ -42,6 +42,22 @@ type OcrCandidate = {
   score: number;
 };
 
+type OcrParsed = {
+  name?: string;
+  cardNumber?: string;
+  set?: string;
+  language?: string;
+  hp?: number;
+  rarity?: string;
+  finish?: string;
+  isSecret?: boolean;
+  isPromo?: boolean;
+  vintageHint?: string;
+  regulationMark?: string;
+  illustrator?: string;
+  estimatedCondition?: (typeof CONDITIONS)[number];
+};
+
 const OCR_HIGH_CONFIDENCE_THRESHOLD = 0.75;
 const OCR_MEDIUM_CONFIDENCE_THRESHOLD = 0.5;
 
@@ -75,6 +91,7 @@ export function SellForm() {
   const [ocrAttemptId, setOcrAttemptId] = useState("");
   const [ocrSelectedCardRefId, setOcrSelectedCardRefId] = useState("");
   const [ocrCandidates, setOcrCandidates] = useState<OcrCandidate[]>([]);
+  const [ocrParsed, setOcrParsed] = useState<OcrParsed | null>(null);
   const [ocrConfidence, setOcrConfidence] = useState(0);
   const [ocrError, setOcrError] = useState("");
   const [ocrHint, setOcrHint] = useState("");
@@ -203,7 +220,7 @@ export function SellForm() {
         error?: string;
         attemptId?: string | null;
         confidence?: number;
-        parsed?: { name?: string };
+        parsed?: OcrParsed;
         candidates?: OcrCandidate[];
       };
 
@@ -217,6 +234,7 @@ export function SellForm() {
       const confidence = Number(json.confidence ?? 0);
       const attemptId = json.attemptId ?? "";
       setOcrCandidates(candidates);
+      setOcrParsed(json.parsed ?? null);
       setOcrConfidence(confidence);
       setOcrAttemptId(attemptId);
 
@@ -238,6 +256,10 @@ export function SellForm() {
         if (detectedTitle) {
           setTitleValue(detectedTitle);
         }
+      }
+
+      if (!isGraded && json.parsed?.estimatedCondition) {
+        setConditionValue(json.parsed.estimatedCondition);
       }
     } catch {
       setOcrError("OCR indisponible pour le moment.");
@@ -433,6 +455,18 @@ export function SellForm() {
                   <p className="text-destructive text-xs">{ocrError}</p>
                 ) : null}
                 {ocrHint ? <p className="text-muted-foreground text-xs">{ocrHint}</p> : null}
+                {ocrParsed ? (
+                  <div className="text-muted-foreground flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                    {ocrParsed.language ? <span>Langue: {ocrParsed.language.toUpperCase()}</span> : null}
+                    {ocrParsed.cardNumber ? <span>Numero: {ocrParsed.cardNumber}</span> : null}
+                    {ocrParsed.set ? <span>Set: {ocrParsed.set}</span> : null}
+                    {ocrParsed.rarity ? <span>Rarete: {ocrParsed.rarity}</span> : null}
+                    {ocrParsed.finish ? <span>Finition: {ocrParsed.finish}</span> : null}
+                    {ocrParsed.estimatedCondition ? (
+                      <span>Etat estime: {ocrParsed.estimatedCondition}</span>
+                    ) : null}
+                  </div>
+                ) : null}
                 {ocrCandidates.length > 0 ? (
                   <div className="flex flex-wrap gap-2">
                     {ocrCandidates.map((candidate) => (

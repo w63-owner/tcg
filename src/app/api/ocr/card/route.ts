@@ -50,6 +50,7 @@ export async function POST(request: Request) {
       .filter(Boolean);
 
     let candidateRows: CardRefLookupRow[] = [];
+    let feedbackBoostByCardRefId: Record<string, number> = {};
     if (lookupTerms.length > 0) {
       const orFilters = lookupTerms
         .flatMap((term) => [
@@ -73,6 +74,39 @@ export async function POST(request: Request) {
         });
       } else {
         candidateRows = (rows ?? []) as CardRefLookupRow[];
+
+        if (candidateRows.length > 0) {
+          const cardRefIds = candidateRows.map((row) => row.id);
+          const { data: feedbackRows, error: feedbackError } = await supabase
+            .from("ocr_attempts")
+            .select("selected_card_ref_id")
+            .eq("user_id", user.id)
+            .in("selected_card_ref_id", cardRefIds)
+            .not("selected_card_ref_id", "is", null)
+            .limit(500);
+
+          if (feedbackError) {
+            logError({
+              event: "ocr_feedback_lookup_failed",
+              message: feedbackError.message,
+              context: { userId: user.id },
+            });
+          } else {
+            const counts = new Map<string, number>();
+            for (const row of feedbackRows ?? []) {
+              const id = (row as { selected_card_ref_id?: string | null }).selected_card_ref_id;
+              if (!id) continue;
+              counts.set(id, (counts.get(id) ?? 0) + 1);
+            }
+
+            feedbackBoostByCardRefId = {};
+            counts.forEach((count, id) => {
+              // Diminishing returns: user corrections help, but never dominate OCR.
+              const boost = Math.min(0.15, Math.log1p(count) * 0.045);
+              feedbackBoostByCardRefId[id] = Number(boost.toFixed(4));
+            });
+          }
+        }
       }
     }
 
@@ -81,6 +115,7 @@ export async function POST(request: Request) {
       rawText: ocrResult.rawText,
       rows: candidateRows,
       limit: 3,
+      feedbackBoostByCardRefId,
     });
 
     const { data: attemptRow, error: attemptError } = await supabase
@@ -117,6 +152,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       ok: true,
+      matchMode: "strict_catalog",
       attemptId: attemptRow?.id ?? null,
       rawText: ocrResult.rawText,
       parsed,
@@ -126,6 +162,10 @@ export async function POST(request: Request) {
         parsed.name ? "name_detected" : "name_missing",
         parsed.cardNumber ? "number_detected" : "number_missing",
         parsed.set ? "set_detected" : "set_missing",
+        parsed.language ? "language_detected" : "language_missing",
+        parsed.finish ? "finish_detected" : "finish_missing",
+        parsed.estimatedCondition ? "condition_hint_detected" : "condition_hint_missing",
+        candidates.length > 0 ? "catalog_match_found" : "catalog_match_missing",
       ],
     });
   } catch (error) {
