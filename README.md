@@ -25,9 +25,13 @@ Create `.env.local` from `.env.example` and set:
 - `POKEMON_TCG_API_BASE_URL` (default: `https://api.pokemontcg.io/v2/cards`)
 - `POKECADATA_API_KEY` (optional, for JP source when required)
 - `POKECADATA_BASE_URL` (optional, enables JP source sync)
-- `CATALOG_SYNC_SOURCES` (default: `pokemontcg,pokecadata`)
+- `TCGDEX_BASE_URL` (default: `https://api.tcgdex.net/v2`)
+- `TCGDEX_LANGS` (default: `fr,en,ja`, `jp` is auto-mapped to `ja` if provided)
+- `CATALOG_SYNC_SOURCES` (default: `tcgdex,pokemontcg,pokecadata`)
 - `CATALOG_SYNC_PAGE_SIZE` (default: `250`)
 - `CATALOG_SYNC_MAX_PAGES` (default: `200`, reduced in incremental mode)
+- `CATALOG_SYNC_CONCURRENCY` (default: `8`)
+- `CATALOG_SYNC_INCREMENTAL_DAYS` (default: `45`)
 
 OCR endpoint:
 

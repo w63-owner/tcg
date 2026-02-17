@@ -1,4 +1,5 @@
 export const SOURCE_PRIORITY = {
+  tcgdex: 95,
   pokemontcg: 90,
   pokecadata: 80,
 };
@@ -51,7 +52,7 @@ export function inferSetId(rawCard, source) {
 }
 
 export function inferCardNumber(rawCard) {
-  const direct = normalizeWhitespace(rawCard?.number || rawCard?.collectorNumber);
+  const direct = normalizeWhitespace(rawCard?.number || rawCard?.localId || rawCard?.collectorNumber);
   if (direct) return direct;
 
   const fromName = normalizeWhitespace(rawCard?.name).match(/\b(\d{1,3}\s*\/\s*\d{2,3})\b/)?.[1];
