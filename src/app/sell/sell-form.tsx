@@ -1145,7 +1145,7 @@ export function SellForm() {
                               </p>
                               <p>
                                 Set:{" "}
-                                {formatSetLabel(cardSetValue || selectedOcrCandidate?.set || null)}
+                                {formatSetLabel(cardSetValue || selectedOcrCandidate?.set)}
                               </p>
                               <p>
                                 Numero: {cardNumberValue || selectedOcrCandidate?.cardNumber || "-"}
