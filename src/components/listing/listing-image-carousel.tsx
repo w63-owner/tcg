@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 
 type ListingCarouselImage = {
@@ -31,7 +32,6 @@ export function ListingImageCarousel({ images }: ListingImageCarouselProps) {
   }
 
   const clampedIndex = Math.min(index, validImages.length - 1);
-  const current = validImages[clampedIndex];
   const hasMultiple = validImages.length > 1;
 
   const goTo = (nextIndex: number) => {
@@ -72,18 +72,41 @@ export function ListingImageCarousel({ images }: ListingImageCarouselProps) {
   return (
     <div className="space-y-2">
       <div
-        className="bg-muted relative aspect-[3/4] overflow-hidden"
+        className="bg-muted relative aspect-[3/4] overflow-hidden select-none touch-pan-y"
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
       >
-        <Image
-          key={current.src}
-          src={current.src}
-          alt={current.alt}
-          width={720}
-          height={960}
-          className="h-full w-full object-cover"
-        />
+        <div
+          className="flex h-full w-full transition-transform duration-300 ease-out"
+          style={{ transform: `translateX(-${clampedIndex * 100}%)` }}
+        >
+          {validImages.map((image) => (
+            <div key={image.src} className="relative h-full w-full shrink-0">
+              <Image src={image.src} alt={image.alt} fill className="object-cover" />
+            </div>
+          ))}
+        </div>
+
+        {hasMultiple ? (
+          <>
+            <button
+              type="button"
+              aria-label="Photo precedente"
+              onClick={() => goTo(clampedIndex - 1)}
+              className="absolute top-1/2 left-2 z-20 hidden h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-white/50 bg-black/60 text-white md:flex"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              aria-label="Photo suivante"
+              onClick={() => goTo(clampedIndex + 1)}
+              className="absolute top-1/2 right-2 z-20 hidden h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-white/50 bg-black/60 text-white md:flex"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </>
+        ) : null}
       </div>
 
       {hasMultiple ? (
@@ -94,12 +117,14 @@ export function ListingImageCarousel({ images }: ListingImageCarouselProps) {
               type="button"
               aria-label={`Aller a la photo ${dotIndex + 1}`}
               onClick={() => setIndex(dotIndex)}
-              className={`h-2 w-2 rounded-full border ${
-                dotIndex === clampedIndex
-                  ? "border-foreground bg-foreground"
-                  : "border-muted-foreground/50 bg-muted-foreground/30"
-              }`}
-            />
+              className="inline-flex h-5 w-5 items-center justify-center rounded-full"
+            >
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  dotIndex === clampedIndex ? "bg-sky-500" : "bg-muted-foreground/50"
+                }`}
+              />
+            </button>
           ))}
         </div>
       ) : null}

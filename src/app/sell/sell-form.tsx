@@ -129,6 +129,8 @@ export function SellForm() {
   const [cameraError, setCameraError] = useState("");
   const [capturedPreviewUrl, setCapturedPreviewUrl] = useState<string | null>(null);
   const [capturedFile, setCapturedFile] = useState<File | null>(null);
+  const [frontPreviewUrl, setFrontPreviewUrl] = useState<string | null>(null);
+  const [backPreviewUrl, setBackPreviewUrl] = useState<string | null>(null);
   const [ocrAttemptId, setOcrAttemptId] = useState("");
   const [ocrSelectedCardRefId, setOcrSelectedCardRefId] = useState("");
   const [ocrCandidates, setOcrCandidates] = useState<OcrCandidate[]>([]);
@@ -215,6 +217,13 @@ export function SellForm() {
       }
     };
   }, [capturedPreviewUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (frontPreviewUrl) URL.revokeObjectURL(frontPreviewUrl);
+      if (backPreviewUrl) URL.revokeObjectURL(backPreviewUrl);
+    };
+  }, [frontPreviewUrl, backPreviewUrl]);
 
   useEffect(() => {
     if (step !== 1) return;
@@ -319,6 +328,18 @@ export function SellForm() {
     transfer.items.add(file);
     input.files = transfer.files;
     input.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+
+  const updateSidePreview = (side: "front" | "back", file: File | null) => {
+    if (side === "front") {
+      if (frontPreviewUrl) URL.revokeObjectURL(frontPreviewUrl);
+      setFrontPreviewUrl(file ? URL.createObjectURL(file) : null);
+      setFrontSelected(Boolean(file));
+      return;
+    }
+    if (backPreviewUrl) URL.revokeObjectURL(backPreviewUrl);
+    setBackPreviewUrl(file ? URL.createObjectURL(file) : null);
+    setBackSelected(Boolean(file));
   };
 
   const capturePhoto = async () => {
@@ -456,7 +477,10 @@ export function SellForm() {
               accept="image/*"
               capture="environment"
               required
-              onChange={(event) => setFrontSelected(Boolean(event.target.files?.length))}
+              onChange={(event) => {
+                const file = event.target.files?.[0] ?? null;
+                updateSidePreview("front", file);
+              }}
             />
             <input
               ref={backInputRef}
@@ -466,7 +490,10 @@ export function SellForm() {
               accept="image/*"
               capture="environment"
               required
-              onChange={(event) => setBackSelected(Boolean(event.target.files?.length))}
+              onChange={(event) => {
+                const file = event.target.files?.[0] ?? null;
+                updateSidePreview("back", file);
+              }}
             />
           </div>
 
@@ -794,7 +821,7 @@ export function SellForm() {
                 />
               )}
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                <div className="h-[70%] w-[64%] rounded-md border-2 border-white/90 shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
+                <div className="w-[min(94vw,calc((100dvh-11rem)*63/88))] aspect-[63/88] rounded-md border-2 border-white/90 shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
               </div>
 
               <div className="absolute inset-x-0 top-0 flex items-center justify-between bg-gradient-to-b from-black/70 to-transparent px-4 pt-6 pb-4">
@@ -821,7 +848,7 @@ export function SellForm() {
               </div>
 
               <div className="pointer-events-none absolute top-16 right-4">
-                <div className="relative h-20 w-14 rounded-sm border border-white/60 bg-white/20">
+                <div className="relative h-20 aspect-[63/88] rounded-sm border border-white/60 bg-white/20">
                   <div className="absolute inset-1 rounded-sm border border-white/70" />
                   <div className="absolute inset-x-0 bottom-1 text-center text-[9px] font-semibold">
                     {cameraSide === "front" ? "RECTO" : "VERSO"}
@@ -882,25 +909,215 @@ export function SellForm() {
                   <h2 className="text-lg font-semibold">Recapitulatif de l&apos;annonce</h2>
                 </header>
 
+                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
                 <div className="space-y-3 rounded-md border p-4">
-                  <p className="text-sm">
-                    <span className="font-medium">Titre:</span> {titleValue || "A renseigner"}
-                  </p>
-                  <p className="text-sm">
-                    <span className="font-medium">Prix vendeur:</span>{" "}
-                    {previewPrice > 0 ? `${previewPrice.toFixed(2)} EUR` : "A renseigner"}
-                  </p>
-                  <p className="text-sm">
-                    <span className="font-medium">Prix affiche estime:</span>{" "}
-                    {previewDisplayPrice > 0 ? `${previewDisplayPrice.toFixed(2)} EUR` : "A renseigner"}
-                  </p>
-                  <p className="text-sm">
-                    <span className="font-medium">Mode:</span>{" "}
-                    {isGraded ? `Gradee (${derivedCondition})` : "Non gradee"}
-                  </p>
+                  <p className="text-sm font-medium">Preview de l&apos;annonce</p>
+                  <div className="bg-muted/20 flex gap-3 rounded-md border p-3">
+                    <div className="bg-muted relative aspect-[3/4] w-28 shrink-0 overflow-hidden rounded-md border">
+                      {frontPreviewUrl ? (
+                        <Image
+                          src={frontPreviewUrl}
+                          alt="Apercu photo recto"
+                          fill
+                          unoptimized
+                          className="object-cover"
+                        />
+                      ) : (
+                        <div className="text-muted-foreground flex h-full items-center justify-center text-[10px]">
+                          Recto manquant
+                        </div>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <p className="truncate text-sm font-semibold">
+                        {titleValue || "Titre a renseigner"}
+                      </p>
+                      <p className="text-base font-semibold">
+                        {previewDisplayPrice > 0
+                          ? `${previewDisplayPrice.toFixed(2)} EUR`
+                          : "Prix a renseigner"}
+                      </p>
+                      <div className="flex flex-wrap gap-1">
+                        <Badge variant="secondary">{isGraded ? "Gradee" : "Non gradee"}</Badge>
+                        <Badge variant="outline">
+                          {isGraded
+                            ? formatConditionLabel(derivedCondition)
+                            : formatConditionLabel(conditionValue)}
+                        </Badge>
+                      </div>
+                      <p className="text-muted-foreground text-xs">
+                        Classe poids: {deliveryWeightClassValue} · OCR:{" "}
+                        {Math.round(ocrConfidence * 100)}%
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <div className="bg-muted relative aspect-[3/4] w-10 overflow-hidden rounded border">
+                          {backPreviewUrl ? (
+                            <Image
+                              src={backPreviewUrl}
+                              alt="Apercu photo verso"
+                              fill
+                              unoptimized
+                              className="object-cover"
+                            />
+                          ) : (
+                            <div className="text-muted-foreground flex h-full items-center justify-center text-[8px]">
+                              Verso
+                            </div>
+                          )}
+                        </div>
+                        <span className="text-muted-foreground text-xs">
+                          {frontSelected && backSelected
+                            ? "Photos recto/verso pretes"
+                            : "Photos incompletes"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <p className="text-sm font-medium">Annonce</p>
+                  <div className="text-muted-foreground grid grid-cols-1 gap-1 text-sm md:grid-cols-2">
+                    <p>
+                      <span className="font-medium text-foreground">Titre:</span>{" "}
+                      {titleValue || "A renseigner"}
+                    </p>
+                    <p>
+                      <span className="font-medium text-foreground">Prix vendeur:</span>{" "}
+                      {previewPrice > 0 ? `${previewPrice.toFixed(2)} EUR` : "A renseigner"}
+                    </p>
+                    <p>
+                      <span className="font-medium text-foreground">Prix affiche estime:</span>{" "}
+                      {previewDisplayPrice > 0 ? `${previewDisplayPrice.toFixed(2)} EUR` : "A renseigner"}
+                    </p>
+                    <p>
+                      <span className="font-medium text-foreground">Mode:</span>{" "}
+                      {isGraded ? "Gradee" : "Non gradee"}
+                    </p>
+                    <p>
+                      <span className="font-medium text-foreground">Recto:</span>{" "}
+                      {frontSelected ? "Ajoute" : "Manquant"}
+                    </p>
+                    <p>
+                      <span className="font-medium text-foreground">Verso:</span>{" "}
+                      {backSelected ? "Ajoute" : "Manquant"}
+                    </p>
+                  </div>
+
+                  <p className="text-sm font-medium">Etat / Gradation</p>
+                  <div className="text-muted-foreground grid grid-cols-1 gap-1 text-sm md:grid-cols-2">
+                    <p>
+                      <span className="font-medium text-foreground">Etat:</span>{" "}
+                      {isGraded
+                        ? formatConditionLabel(derivedCondition)
+                        : formatConditionLabel(conditionValue)}
+                    </p>
+                    <p>
+                      <span className="font-medium text-foreground">Societe:</span>{" "}
+                      {isGraded ? gradingCompanyValue : "-"}
+                    </p>
+                    <p>
+                      <span className="font-medium text-foreground">Note:</span>{" "}
+                      {isGraded ? gradeValue : "-"}
+                    </p>
+                    <p>
+                      <span className="font-medium text-foreground">Classe de poids:</span>{" "}
+                      {deliveryWeightClassValue}
+                    </p>
+                  </div>
+
+                  <p className="text-sm font-medium">OCR / Reference carte</p>
+                  <div className="text-muted-foreground grid grid-cols-1 gap-1 text-sm md:grid-cols-2">
+                    <p>
+                      <span className="font-medium text-foreground">Confiance OCR:</span>{" "}
+                      {Math.round(ocrConfidence * 100)}%
+                    </p>
+                    <p>
+                      <span className="font-medium text-foreground">Tentative OCR:</span>{" "}
+                      {ocrAttemptId || "-"}
+                    </p>
+                    <p>
+                      <span className="font-medium text-foreground">Card ref ID:</span>{" "}
+                      {ocrSelectedCardRefId || "-"}
+                    </p>
+                    <p>
+                      <span className="font-medium text-foreground">Nom OCR:</span>{" "}
+                      {selectedOcrCandidate?.name || ocrParsed?.name || "-"}
+                    </p>
+                    <p>
+                      <span className="font-medium text-foreground">Set:</span>{" "}
+                      {selectedOcrCandidate?.set
+                        ? formatSetLabel(selectedOcrCandidate.set)
+                        : ocrParsed?.set
+                          ? formatSetLabel(ocrParsed.set)
+                          : "-"}
+                    </p>
+                    <p>
+                      <span className="font-medium text-foreground">Numero:</span>{" "}
+                      {selectedOcrCandidate?.cardNumber || ocrParsed?.cardNumber || "-"}
+                    </p>
+                    <p>
+                      <span className="font-medium text-foreground">Langue:</span>{" "}
+                      {selectedOcrCandidate?.language
+                        ? selectedOcrCandidate.language.toUpperCase()
+                        : ocrParsed?.language
+                          ? ocrParsed.language.toUpperCase()
+                          : "-"}
+                    </p>
+                    <p>
+                      <span className="font-medium text-foreground">HP:</span>{" "}
+                      {selectedOcrCandidate?.hp ?? ocrParsed?.hp ?? "-"}
+                    </p>
+                    <p>
+                      <span className="font-medium text-foreground">Rarete:</span>{" "}
+                      {selectedOcrCandidate?.rarity || ocrParsed?.rarity || "-"}
+                    </p>
+                    <p>
+                      <span className="font-medium text-foreground">Finition:</span>{" "}
+                      {selectedOcrCandidate?.finish || ocrParsed?.finish || "-"}
+                    </p>
+                    <p>
+                      <span className="font-medium text-foreground">Etat estime:</span>{" "}
+                      {selectedOcrCandidate?.estimatedCondition
+                        ? formatConditionLabel(selectedOcrCandidate.estimatedCondition)
+                        : ocrParsed?.estimatedCondition
+                          ? formatConditionLabel(ocrParsed.estimatedCondition)
+                          : "-"}
+                    </p>
+                    <p>
+                      <span className="font-medium text-foreground">Secret:</span>{" "}
+                      {selectedOcrCandidate?.isSecret ? "Oui" : "Non"}
+                    </p>
+                    <p>
+                      <span className="font-medium text-foreground">Promo:</span>{" "}
+                      {selectedOcrCandidate?.isPromo ? "Oui" : "Non"}
+                    </p>
+                    <p>
+                      <span className="font-medium text-foreground">Vintage:</span>{" "}
+                      {selectedOcrCandidate?.vintageHint || ocrParsed?.vintageHint || "-"}
+                    </p>
+                    <p>
+                      <span className="font-medium text-foreground">Regulation:</span>{" "}
+                      {selectedOcrCandidate?.regulationMark || ocrParsed?.regulationMark || "-"}
+                    </p>
+                    <p>
+                      <span className="font-medium text-foreground">Illustrateur:</span>{" "}
+                      {selectedOcrCandidate?.illustrator || ocrParsed?.illustrator || "-"}
+                    </p>
+                    <p>
+                      <span className="font-medium text-foreground">Annee:</span>{" "}
+                      {selectedOcrCandidate?.releaseYear ?? "-"}
+                    </p>
+                    <p className="md:col-span-2">
+                      <span className="font-medium text-foreground">Reference technique:</span>{" "}
+                      {selectedOcrCandidate?.tcgId ||
+                        selectedOcrCandidate?.cardRefId ||
+                        ocrSelectedCardRefId ||
+                        "-"}
+                    </p>
+                  </div>
+                </div>
                 </div>
 
-                <div className="mt-auto pt-4">
+                <div className="mt-3 shrink-0 border-t bg-background/95 pt-3 backdrop-blur">
                   <Button
                     type="submit"
                     form="sell-form"

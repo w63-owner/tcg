@@ -105,8 +105,8 @@ export function PriceHistoryCard({ observations }: PriceHistoryCardProps) {
   })();
 
   return (
-    <section className="space-y-4 rounded-xl border p-4">
-      <h3 className="text-lg font-semibold">Historique des prix</h3>
+    <section className="space-y-4 border-t pt-4">
+      <h3 className="text-base font-semibold">Historique des prix</h3>
 
       <div className="bg-muted flex overflow-x-auto rounded-full p-1">
         {PERIODS.map((period) => (
@@ -114,7 +114,7 @@ export function PriceHistoryCard({ observations }: PriceHistoryCardProps) {
             key={period.key}
             type="button"
             onClick={() => setPeriodKey(period.key)}
-            className={`shrink-0 rounded-full px-3 py-1 text-sm font-medium transition-colors ${
+            className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
               periodKey === period.key
                 ? "bg-background text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground"
@@ -186,11 +186,16 @@ export function PriceHistoryCard({ observations }: PriceHistoryCardProps) {
         </div>
       </div>
 
-      <div className="space-y-3">
-        <h4 className="text-lg font-semibold">Donnees historiques</h4>
+      <div className="space-y-2">
+        <h4 className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+          Donnees historiques
+        </h4>
         <div className="space-y-3 rounded-md border p-3 text-sm">
           <div className="flex items-start justify-between gap-3 border-b pb-2">
-            <p>Fourchette de prix ({formatRangeLabel(365)})</p>
+            <div>
+              <p>Fourchette de prix</p>
+              <p className="text-muted-foreground text-xs">{formatRangeLabel(365)}</p>
+            </div>
             <p className="font-medium">
               {range12mMin !== null && range12mMax !== null
                 ? `${toEuro(range12mMin)} - ${toEuro(range12mMax)}`
@@ -198,7 +203,10 @@ export function PriceHistoryCard({ observations }: PriceHistoryCardProps) {
             </p>
           </div>
           <div className="flex items-start justify-between gap-3 border-b pb-2">
-            <p>Fourchette de prix ({formatRangeLabel(90)})</p>
+            <div>
+              <p>Fourchette de prix</p>
+              <p className="text-muted-foreground text-xs">{formatRangeLabel(90)}</p>
+            </div>
             <p className="font-medium">
               {range3mMin !== null && range3mMax !== null
                 ? `${toEuro(range3mMin)} - ${toEuro(range3mMax)}`
@@ -210,7 +218,10 @@ export function PriceHistoryCard({ observations }: PriceHistoryCardProps) {
             <p className="font-medium">{volatility !== null ? `${volatility}%` : "-"}</p>
           </div>
           <div className="flex items-start justify-between gap-3">
-            <p>Nombre d&apos;observations ({formatRangeLabel(90)})</p>
+            <div>
+              <p>Nombre d&apos;observations</p>
+              <p className="text-muted-foreground text-xs">{formatRangeLabel(90)}</p>
+            </div>
             <p className="font-medium">{observations3m.length}</p>
           </div>
         </div>
