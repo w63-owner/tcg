@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Send } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,17 +24,13 @@ export function ConversationLiveControls({
   conversationId,
   currentUserId,
   counterpartUserId,
-  counterpartName,
 }: ConversationLiveControlsProps) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const [content, setContent] = useState("");
   const [isSending, setIsSending] = useState(false);
-  const [isCounterpartOnline, setIsCounterpartOnline] = useState(false);
-  const [isCounterpartTyping, setIsCounterpartTyping] = useState(false);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const typingIndicatorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const channel = supabase.channel(`conversation:${conversationId}`, {
@@ -52,22 +49,11 @@ export function ConversationLiveControls({
         () => router.refresh(),
       )
       .on("presence", { event: "sync" }, () => {
-        const state = channel.presenceState();
-        const online = Object.keys(state).includes(counterpartUserId);
-        setIsCounterpartOnline(online);
+        channel.presenceState();
       })
       .on("broadcast", { event: "typing" }, ({ payload }) => {
         const data = payload as TypingPayload;
         if (data.userId !== counterpartUserId) return;
-        setIsCounterpartTyping(Boolean(data.typing));
-        if (typingIndicatorTimeoutRef.current) {
-          clearTimeout(typingIndicatorTimeoutRef.current);
-        }
-        if (data.typing) {
-          typingIndicatorTimeoutRef.current = setTimeout(() => {
-            setIsCounterpartTyping(false);
-          }, 1700);
-        }
       })
       .subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
@@ -78,7 +64,6 @@ export function ConversationLiveControls({
     channelRef.current = channel;
     return () => {
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-      if (typingIndicatorTimeoutRef.current) clearTimeout(typingIndicatorTimeoutRef.current);
       void channel.untrack();
       void supabase.removeChannel(channel);
     };
@@ -133,36 +118,29 @@ export function ConversationLiveControls({
   };
 
   return (
-    <div className="space-y-2">
-      <p className="text-muted-foreground text-xs">
-        {isCounterpartTyping
-          ? `${counterpartName} ecrit...`
-          : isCounterpartOnline
-            ? `${counterpartName} est en ligne`
-            : `${counterpartName} est hors ligne`}
-      </p>
-      <div className="flex items-center gap-2">
-        <Input
-          value={content}
-          onChange={(event) => onChange(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault();
-              void onSend();
-            }
-          }}
-          placeholder="Ecris ton message..."
-          maxLength={2000}
-        />
-        <Button
-          type="button"
-          onClick={onSend}
-          disabled={isSending || !content.trim()}
-          className="shrink-0"
-        >
-          {isSending ? "..." : "Envoyer"}
-        </Button>
-      </div>
+    <div className="flex items-center gap-2">
+      <Input
+        value={content}
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && !event.shiftKey) {
+            event.preventDefault();
+            void onSend();
+          }
+        }}
+        placeholder="Ecris ton message..."
+        maxLength={2000}
+      />
+      <Button
+        type="button"
+        size="icon"
+        onClick={onSend}
+        disabled={isSending || !content.trim()}
+        className="shrink-0"
+        aria-label="Envoyer le message"
+      >
+        {isSending ? "..." : <Send className="h-4 w-4" />}
+      </Button>
     </div>
   );
 }

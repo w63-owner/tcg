@@ -125,6 +125,9 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
       ),
     };
   });
+  const conversationsWithMessages = details.filter(
+    (conversation) => conversation.latestMessage !== null,
+  );
 
   return (
     <section className="space-y-4">
@@ -139,13 +142,13 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
         </p>
       ) : null}
 
-      {details.length === 0 ? (
+      {conversationsWithMessages.length === 0 ? (
         <p className="text-muted-foreground rounded-md border p-6 text-center text-sm">
           Aucun message pour le moment.
         </p>
       ) : (
         <div className="space-y-2">
-          {details.map((conversation) => (
+          {conversationsWithMessages.map((conversation) => (
             (() => {
               const listing = pickOne(conversation.listing);
               return (
@@ -174,7 +177,7 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
                       {listing?.title ?? "Annonce"}
                     </p>
                     <p className="text-muted-foreground line-clamp-1 text-xs">
-                      {conversation.latestMessage?.content ?? "Aucun message"}
+                      {conversation.latestMessage?.content}
                     </p>
                     <p className="text-muted-foreground line-clamp-1 text-xs">
                       {conversation.counterpart} · {conversation.relativeTime}

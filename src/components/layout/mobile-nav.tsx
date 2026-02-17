@@ -29,8 +29,10 @@ export function MobileNav() {
   const pathname = usePathname();
   const hideOnSellFlow = pathname === "/sell" || pathname.startsWith("/sell/");
   const hideOnSearch = pathname === "/search" || pathname.startsWith("/search/");
+  const hideOnListing = pathname === "/listing" || pathname.startsWith("/listing/");
+  const hideOnConversation = pathname.startsWith("/messages/");
 
-  if (hideOnSellFlow || hideOnSearch) {
+  if (hideOnSellFlow || hideOnSearch || hideOnListing || hideOnConversation) {
     return null;
   }
 

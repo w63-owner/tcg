@@ -33,7 +33,7 @@ export function OfferModal({
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="outline" disabled={!canOffer}>
+        <Button variant="outline" disabled={!canOffer} className="w-full">
           Faire une offre
         </Button>
       </DialogTrigger>

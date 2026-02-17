@@ -1,8 +1,8 @@
 import Link from "next/link";
 import Image from "next/image";
 import { notFound } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { requireAuthenticatedUser } from "@/lib/auth/require-authenticated-user";
 import { ThreadRealtime } from "./thread-realtime";
 import { ConversationLiveControls } from "./conversation-live-controls";
@@ -13,12 +13,20 @@ type ConversationRow = {
   listing_id: string;
   buyer_id: string;
   seller_id: string;
-  listing: Array<{
-    id: string;
-    title: string;
-    cover_image_url: string | null;
-    display_price: number | null;
-  }> | null;
+  listing:
+    | {
+        id: string;
+        title: string;
+        cover_image_url: string | null;
+        display_price: number | null;
+      }
+    | Array<{
+        id: string;
+        title: string;
+        cover_image_url: string | null;
+        display_price: number | null;
+      }>
+    | null;
   buyer: Array<{ id: string; username: string }> | null;
   seller: Array<{ id: string; username: string }> | null;
 };
@@ -35,6 +43,11 @@ type MessagesThreadPageProps = {
   params: Promise<{ conversationId: string }>;
   searchParams: Promise<Record<string, string>>;
 };
+
+function pickOne<T>(value: T | T[] | null | undefined): T | null {
+  if (!value) return null;
+  return Array.isArray(value) ? (value[0] ?? null) : value;
+}
 
 export default async function MessagesThreadPage({
   params,
@@ -81,59 +94,82 @@ export default async function MessagesThreadPage({
       : conversation.buyer?.[0]?.username;
   const counterpartUserId =
     conversation.buyer_id === user.id ? conversation.seller_id : conversation.buyer_id;
-  const listing = conversation.listing?.[0] ?? null;
+  const listing = pickOne(conversation.listing);
   const listingPrice = listing?.display_price ?? null;
+  const canOffer = Boolean(listing && user.id !== conversation.seller_id);
 
   return (
-    <section className="flex min-h-[calc(100dvh-10rem)] flex-col gap-3">
+    <section className="flex min-h-[calc(100dvh-8rem)] flex-col gap-3 pb-[calc(8.5rem+var(--safe-area-bottom))] md:pb-0">
       <ThreadRealtime conversationId={conversation.id} />
 
-      <header className="flex items-center justify-between gap-3">
-        <Button asChild variant="ghost" size="sm" className="-ml-2">
-          <Link href="/messages">Retour</Link>
+      <header className="relative flex items-center justify-center">
+        <Button asChild variant="ghost" size="icon" className="absolute left-0 h-9 w-9">
+          <Link href="/messages" aria-label="Retour aux conversations">
+            <ArrowLeft className="h-4 w-4" />
+          </Link>
         </Button>
         <Link
           href={`/messages/${conversation.id}/profile`}
-          className="text-sm font-semibold hover:underline"
+          className="text-center text-sm font-semibold hover:underline"
         >
           {counterpart ?? "Utilisateur"}
         </Link>
       </header>
 
+      <div className="rounded-md border p-3">
+        {listing ? (
+          <Link
+            href={`/listing/${listing.id}`}
+            className="flex items-center gap-3 transition-colors hover:bg-muted/40"
+          >
+            <div className="bg-muted relative h-14 w-12 shrink-0 overflow-hidden rounded-sm border">
+              {listing.cover_image_url ? (
+                <Image
+                  src={listing.cover_image_url}
+                  alt={listing.title}
+                  fill
+                  sizes="48px"
+                  className="object-cover"
+                />
+              ) : null}
+            </div>
+            <div className="min-w-0">
+              <p className="line-clamp-1 text-sm font-semibold">{listing.title}</p>
+              <p className="text-muted-foreground text-xs">
+                {typeof listingPrice === "number"
+                  ? `${listingPrice.toFixed(2)} EUR`
+                  : "Prix indisponible"}
+              </p>
+            </div>
+          </Link>
+        ) : (
+          <p className="text-muted-foreground text-xs">
+            Informations annonce indisponibles.
+          </p>
+        )}
+      </div>
+
+      <div className="flex-1 overflow-hidden">
+        <div className="h-full pt-3">
+          <ConversationThread messages={rows} currentUserId={user.id} />
+        </div>
+      </div>
+
       {listing ? (
-        <Link
-          href={`/listing/${listing.id}`}
-          className="flex items-center gap-3 rounded-md border p-3 transition-colors hover:bg-muted/40"
-        >
-          <div className="bg-muted relative h-14 w-12 shrink-0 overflow-hidden rounded-sm border">
-            {listing.cover_image_url ? (
-              <Image
-                src={listing.cover_image_url}
-                alt={listing.title}
-                fill
-                sizes="48px"
-                className="object-cover"
-              />
-            ) : null}
-          </div>
-          <div className="min-w-0">
-            <p className="line-clamp-1 text-sm font-semibold">{listing.title}</p>
-            <p className="text-muted-foreground text-xs">
-              {typeof listingPrice === "number"
-                ? `${listingPrice.toFixed(2)} EUR`
-                : "Prix indisponible"}
-            </p>
-          </div>
-        </Link>
+        <div className="fixed inset-x-0 bottom-[calc(4.75rem+var(--safe-area-bottom))] z-40 px-4 md:hidden">
+          {canOffer ? (
+            <Button asChild variant="outline" className="w-full">
+              <Link href={`/listing/${listing.id}`}>Faire une offre</Link>
+            </Button>
+          ) : (
+            <Button variant="outline" className="w-full" disabled>
+              Faire une offre
+            </Button>
+          )}
+        </div>
       ) : null}
 
-      <Card className="flex-1 overflow-hidden">
-        <CardContent className="h-full pt-6">
-          <ConversationThread messages={rows} currentUserId={user.id} />
-        </CardContent>
-      </Card>
-
-      <div className="border-border/70 rounded-md border bg-background/95 p-2">
+      <div className="border-border/70 fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 px-4 pt-2 pb-[max(0.75rem,var(--safe-area-bottom))] backdrop-blur md:static md:rounded-md md:border md:p-2">
         <ConversationLiveControls
           conversationId={conversation.id}
           currentUserId={user.id}

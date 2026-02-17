@@ -122,6 +122,22 @@ export default async function Home({ searchParams }: HomeProps) {
     const qs = new URLSearchParams(draft).toString();
     return qs ? `/?${qs}` : "/";
   };
+  const buildEditorHref = (
+    updates: Partial<Record<string, string>>,
+    removedKeys: string[] = [],
+  ) => {
+    const draft = { ...baseParams };
+    removedKeys.forEach((key) => delete draft[key]);
+    Object.entries(updates).forEach(([key, value]) => {
+      if (!value?.trim()) {
+        delete draft[key];
+      } else {
+        draft[key] = value;
+      }
+    });
+    const qs = new URLSearchParams(draft).toString();
+    return qs ? `/search?${qs}` : "/search";
+  };
 
   const conditionOptions = [
     { value: "", label: "Tous etats" },
@@ -147,37 +163,27 @@ export default async function Home({ searchParams }: HomeProps) {
 
   const quickBadges: Array<{ key: string; label: string; href: string; active: boolean }> = [
     {
-      key: "search-edit",
-      label: query ? `Recherche: ${query}` : "Recherche",
-      href: Object.keys(baseParams).length > 0
-        ? `/search?${new URLSearchParams(baseParams).toString()}`
-        : "/search",
-      active: Boolean(query),
-    },
-    {
       key: "set-edit",
       label: setFilter ? `Serie: ${setFilter}` : "Serie",
-      href: Object.keys(baseParams).length > 0
-        ? `/search?${new URLSearchParams(baseParams).toString()}`
-        : "/search",
+      href: buildEditorHref({}),
       active: Boolean(setFilter),
     },
     ...conditionOptions.map((option) => ({
       key: `condition-${option.value || "all"}`,
       label: option.label,
-      href: buildHref({ condition: option.value }),
+      href: buildEditorHref({ condition: option.value }),
       active: condition === option.value,
     })),
     ...gradedOptions.map((option) => ({
       key: `graded-${option.value || "all"}`,
       label: option.label,
-      href: buildHref({ is_graded: option.value }),
+      href: buildEditorHref({ is_graded: option.value }),
       active: isGraded === option.value,
     })),
     ...sortOptions.map((option) => ({
       key: `sort-${option.value}`,
       label: option.label,
-      href: buildHref({ sort: option.value }),
+      href: buildEditorHref({ sort: option.value }),
       active: (sort || "date_desc") === option.value,
     })),
   ];

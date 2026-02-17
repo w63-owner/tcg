@@ -309,34 +309,30 @@ export default async function FavoritesPage() {
         </TabsContent>
 
         <TabsContent value="searches">
-          <Card>
-            <CardHeader>
-              <CardTitle>Recherches sauvegardees</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {savedSearchesWithMeta.length > 0 ? (
-                <SavedSearchesRealtimeListener totalNewMatches={totalNewMatches} />
-              ) : null}
-              {savedSearchesWithMeta.length === 0 ? (
-                <p className="text-muted-foreground text-sm">
-                  Tu n&apos;as pas encore sauvegarde de recherche.
-                </p>
-              ) : (
-                savedSearchesWithMeta.map((row) => (
-                  <SavedSearchItem
-                    key={row.id}
-                    id={row.id}
-                    title={row.displayTitle}
-                    createdAt={row.created_at}
-                    criteria={row.criteria}
-                    newMatchesCount={row.newMatchesCount}
-                    relaunchHref={buildSearchHref(row.search_params)}
-                    editHref={buildSearchEditorHref(row.search_params, row.id)}
-                  />
-                ))
-              )}
-            </CardContent>
-          </Card>
+          <div className="space-y-3">
+            <h2 className="text-base font-semibold">Recherches sauvegardees</h2>
+            {savedSearchesWithMeta.length > 0 ? (
+              <SavedSearchesRealtimeListener totalNewMatches={totalNewMatches} />
+            ) : null}
+            {savedSearchesWithMeta.length === 0 ? (
+              <p className="text-muted-foreground text-sm">
+                Tu n&apos;as pas encore sauvegarde de recherche.
+              </p>
+            ) : (
+              savedSearchesWithMeta.map((row) => (
+                <SavedSearchItem
+                  key={row.id}
+                  id={row.id}
+                  title={row.displayTitle}
+                  createdAt={row.created_at}
+                  criteria={row.criteria}
+                  newMatchesCount={row.newMatchesCount}
+                  relaunchHref={buildSearchHref(row.search_params)}
+                  editHref={buildSearchEditorHref(row.search_params, row.id)}
+                />
+              ))
+            )}
+          </div>
         </TabsContent>
 
         <TabsContent value="sellers">
