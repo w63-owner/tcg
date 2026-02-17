@@ -1,36 +1,52 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# TCG Marketplace (Next.js)
 
-## Getting Started
+Marketplace C2C Pokemon (Next.js App Router + Supabase + Stripe).
 
-First, run the development server:
+## Prerequisites
+
+- Node.js 20+
+- npm
+- Supabase project (URL + anon key + service role key)
+- Stripe test key (optional for local checkout tests)
+
+## Environment
+
+Create `.env.local` from `.env.example` and set:
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `NEXT_PUBLIC_SITE_URL` (default local: `http://localhost:3000`)
+- `STRIPE_SECRET_KEY` (for checkout flows)
+- `STRIPE_WEBHOOK_SECRET` (for webhook validation)
+
+## Useful commands
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run dev          # local dev (webpack mode)
+npm run dev:turbo    # local dev (turbopack, optional)
+npm run dev:reset    # stop stale dev processes + clear lock + restart
+npm run lint
+npm test
+npm run build
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Seed and audit scripts
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run seed:listings          # demo listings seed
+npm run seed:listings:massive  # 120 demo listings
+npm run stress:auth            # auth stress test
+npm run rls:audit              # RLS intrusion smoke checks
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Scripts are blocked in production unless explicitly allowed with:
 
-## Learn More
+```bash
+ALLOW_PROD_SCRIPTS=true
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Notes
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Service worker is intentionally disabled in development to avoid stale chunk/cache issues.
+- If dev lock issues appear, use `npm run dev:reset`.
