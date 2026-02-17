@@ -34,11 +34,51 @@ const CONDITIONS = [
 const GRADING_COMPANIES = ["PSA", "PCA", "BGS", "CGC", "SGC", "ACE", "OTHER"] as const;
 const WEIGHT_CLASSES = ["XS", "S", "M", "L", "XL"] as const;
 
+const SET_CODE_LABELS: Record<string, string> = {
+  BASE1: "Set de Base",
+  BASE2: "Jungle",
+  BASE3: "Fossile",
+  BASE4: "Base Set 2",
+  BASE5: "Team Rocket",
+  BASEP: "Promos Set de Base",
+};
+
+function formatSetLabel(setValue?: string) {
+  const raw = String(setValue ?? "").trim();
+  if (!raw) return "";
+  const upper = raw.toUpperCase();
+  if (SET_CODE_LABELS[upper]) {
+    return SET_CODE_LABELS[upper];
+  }
+
+  if (upper.startsWith("EXP-")) {
+    return `Extension ${upper.replace("EXP-", "")}`;
+  }
+
+  return raw
+    .replace(/[_-]+/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 type OcrCandidate = {
   cardRefId: string;
   name: string;
   set: string;
   tcgId?: string | null;
+  cardNumber?: string | null;
+  language?: string | null;
+  hp?: number | null;
+  rarity?: string | null;
+  finish?: string | null;
+  isSecret?: boolean | null;
+  isPromo?: boolean | null;
+  vintageHint?: string | null;
+  regulationMark?: string | null;
+  illustrator?: string | null;
+  estimatedCondition?: string | null;
+  releaseYear?: number | null;
+  imageUrl?: string | null;
   score: number;
 };
 
@@ -112,6 +152,10 @@ export function SellForm() {
   const previewPrice = Number(priceValue || 0);
   const previewDisplayPrice =
     previewPrice > 0 ? Math.round((previewPrice * 1.05 + 0.7) * 100) / 100 : 0;
+  const selectedOcrCandidate = useMemo(
+    () => ocrCandidates.find((candidate) => candidate.cardRefId === ocrSelectedCardRefId) ?? null,
+    [ocrCandidates, ocrSelectedCardRefId],
+  );
 
   const checkpoints = [
     { label: "Photos", done: frontSelected && backSelected },
@@ -459,7 +503,7 @@ export function SellForm() {
                   <div className="text-muted-foreground flex flex-wrap gap-x-3 gap-y-1 text-xs">
                     {ocrParsed.language ? <span>Langue: {ocrParsed.language.toUpperCase()}</span> : null}
                     {ocrParsed.cardNumber ? <span>Numero: {ocrParsed.cardNumber}</span> : null}
-                    {ocrParsed.set ? <span>Set: {ocrParsed.set}</span> : null}
+                    {ocrParsed.set ? <span>Set: {formatSetLabel(ocrParsed.set)}</span> : null}
                     {ocrParsed.rarity ? <span>Rarete: {ocrParsed.rarity}</span> : null}
                     {ocrParsed.finish ? <span>Finition: {ocrParsed.finish}</span> : null}
                     {ocrParsed.estimatedCondition ? (
@@ -468,38 +512,75 @@ export function SellForm() {
                   </div>
                 ) : null}
                 {ocrCandidates.length > 0 ? (
-                  <div className="flex flex-wrap gap-2">
-                    {ocrCandidates.map((candidate) => (
-                      <Button
-                        key={candidate.cardRefId}
-                        type="button"
-                        variant={
-                          ocrSelectedCardRefId === candidate.cardRefId
-                            ? "default"
-                            : "outline"
-                        }
-                        className="h-auto max-w-full px-2 py-1 text-left"
-                        onClick={() => {
-                          setOcrSelectedCardRefId(candidate.cardRefId);
-                          setTitleValue(candidate.name);
-                          if (ocrAttemptId) {
-                            void fetch("/api/ocr/card/selection", {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({
-                                attemptId: ocrAttemptId,
-                                selectedCardRefId: candidate.cardRefId,
-                              }),
-                            }).catch(() => undefined);
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap gap-2">
+                      {ocrCandidates.map((candidate) => (
+                        <Button
+                          key={candidate.cardRefId}
+                          type="button"
+                          variant={
+                            ocrSelectedCardRefId === candidate.cardRefId
+                              ? "default"
+                              : "outline"
                           }
-                        }}
-                      >
-                        <span className="truncate text-xs">
-                          {candidate.name} · {candidate.set} ·{" "}
-                          {Math.round(candidate.score * 100)}%
-                        </span>
-                      </Button>
-                    ))}
+                          className="h-auto max-w-full px-2 py-1 text-left"
+                          onClick={() => {
+                            setOcrSelectedCardRefId(candidate.cardRefId);
+                            setTitleValue(candidate.name);
+                            if (ocrAttemptId) {
+                              void fetch("/api/ocr/card/selection", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  attemptId: ocrAttemptId,
+                                  selectedCardRefId: candidate.cardRefId,
+                                }),
+                              }).catch(() => undefined);
+                            }
+                          }}
+                        >
+                          <span className="truncate text-xs">
+                            {candidate.name} · {formatSetLabel(candidate.set)} ·{" "}
+                            {Math.round(candidate.score * 100)}%
+                          </span>
+                        </Button>
+                      ))}
+                    </div>
+
+                    {selectedOcrCandidate ? (
+                      <div className="bg-muted/30 space-y-2 rounded-md border p-2 text-xs">
+                        <p className="font-medium">Details de la proposition selectionnee</p>
+                        <div className="text-muted-foreground grid grid-cols-2 gap-1">
+                          <span>Nom: {selectedOcrCandidate.name}</span>
+                          <span>Set: {formatSetLabel(selectedOcrCandidate.set)}</span>
+                          <span>
+                            Confiance: {Math.round(selectedOcrCandidate.score * 100)}%
+                          </span>
+                          <span>Numero: {selectedOcrCandidate.cardNumber || "-"}</span>
+                          <span>
+                            Langue:{" "}
+                            {selectedOcrCandidate.language
+                              ? selectedOcrCandidate.language.toUpperCase()
+                              : "-"}
+                          </span>
+                          <span>HP: {selectedOcrCandidate.hp ?? "-"}</span>
+                          <span>Rarete: {selectedOcrCandidate.rarity || "-"}</span>
+                          <span>Finition: {selectedOcrCandidate.finish || "-"}</span>
+                          <span>Secret: {selectedOcrCandidate.isSecret ? "Oui" : "Non"}</span>
+                          <span>Promo: {selectedOcrCandidate.isPromo ? "Oui" : "Non"}</span>
+                          <span>Vintage: {selectedOcrCandidate.vintageHint || "-"}</span>
+                          <span>Regulation: {selectedOcrCandidate.regulationMark || "-"}</span>
+                          <span>Illustrateur: {selectedOcrCandidate.illustrator || "-"}</span>
+                          <span>
+                            Etat estime: {selectedOcrCandidate.estimatedCondition || "-"}
+                          </span>
+                          <span>Annee: {selectedOcrCandidate.releaseYear ?? "-"}</span>
+                          <span className="col-span-2">
+                            Ref: {selectedOcrCandidate.tcgId || selectedOcrCandidate.cardRefId}
+                          </span>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 ) : (
                   <p className="text-muted-foreground text-xs">

@@ -21,6 +21,17 @@ export type CardRefCandidate = {
   tcgId?: string | null;
   cardNumber?: string | null;
   language?: string | null;
+  hp?: number | null;
+  rarity?: string | null;
+  finish?: string | null;
+  isSecret?: boolean | null;
+  isPromo?: boolean | null;
+  vintageHint?: string | null;
+  regulationMark?: string | null;
+  illustrator?: string | null;
+  estimatedCondition?: string | null;
+  releaseYear?: number | null;
+  imageUrl?: string | null;
   score: number;
 };
 
@@ -33,6 +44,15 @@ export type CardRefLookupRow = {
   language?: string | null;
   rarity?: string | null;
   finish?: string | null;
+  hp?: number | null;
+  is_secret?: boolean | null;
+  is_promo?: boolean | null;
+  vintage_hint?: string | null;
+  regulation_mark?: string | null;
+  illustrator?: string | null;
+  estimated_condition?: string | null;
+  release_year?: number | null;
+  image_url?: string | null;
 };
 
 function normalize(value: string) {
@@ -285,6 +305,17 @@ export function rankCardRefCandidates(params: {
         tcgId: row.tcg_id,
         cardNumber: row.card_number,
         language: row.language,
+        hp: row.hp,
+        rarity: row.rarity,
+        finish: row.finish,
+        isSecret: row.is_secret,
+        isPromo: row.is_promo,
+        vintageHint: row.vintage_hint,
+        regulationMark: row.regulation_mark,
+        illustrator: row.illustrator,
+        estimatedCondition: row.estimated_condition,
+        releaseYear: row.release_year,
+        imageUrl: row.image_url,
         score: Math.min(0.99, Math.max(0, Number(score.toFixed(4)))),
       } satisfies CardRefCandidate;
     })

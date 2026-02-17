@@ -63,7 +63,9 @@ export async function POST(request: Request) {
 
       const { data: rows, error: lookupError } = await supabase
         .from("cards_ref")
-        .select("id, name, set_id, tcg_id, card_number, language, rarity, finish")
+        .select(
+          "id, name, set_id, tcg_id, card_number, language, hp, rarity, finish, is_secret, is_promo, vintage_hint, regulation_mark, illustrator, estimated_condition, release_year, image_url",
+        )
         .or(orFilters)
         .limit(80);
 
@@ -115,7 +117,7 @@ export async function POST(request: Request) {
       parsed,
       rawText: ocrResult.rawText,
       rows: candidateRows,
-      limit: 3,
+      limit: 5,
       feedbackBoostByCardRefId,
     });
 
