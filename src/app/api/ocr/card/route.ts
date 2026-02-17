@@ -57,12 +57,13 @@ export async function POST(request: Request) {
           `name.ilike.%${term}%`,
           `set_id.ilike.%${term}%`,
           `tcg_id.ilike.%${term}%`,
+          `card_number.ilike.%${term}%`,
         ])
         .join(",");
 
       const { data: rows, error: lookupError } = await supabase
         .from("cards_ref")
-        .select("id, name, set_id, tcg_id")
+        .select("id, name, set_id, tcg_id, card_number, language, rarity, finish")
         .or(orFilters)
         .limit(80);
 

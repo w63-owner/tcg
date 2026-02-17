@@ -15,7 +15,9 @@
     "rls:audit": "node scripts/rls-intrusion-audit.mjs",
     "seed:listings": "node scripts/seed-listings.mjs",
     "seed:listings:massive": "node scripts/seed-listings.mjs 120",
-    "seed:price-guide": "node scripts/seed-price-guide.mjs"
+    "seed:price-guide": "node scripts/seed-price-guide.mjs",
+    "seed:cards-catalog": "node scripts/seed-cards-catalog.mjs",
+    "seed:cards-catalog:incremental": "node scripts/seed-cards-catalog.mjs --incremental"
   },
   "dependencies": {
     "@supabase/ssr": "^0.8.0",

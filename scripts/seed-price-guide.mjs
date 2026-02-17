@@ -7,8 +7,10 @@
  * - /Users/Antonin/Downloads/price_guide_6.json
  *
  * Upserts:
- * - public.cards_ref (for single cards)
  * - public.price_estimations (for cards + sealed products)
+ *
+ * Legacy behavior:
+ * - pass --with-cards-ref-legacy to also upsert cards_ref using local heuristics.
  */
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -41,6 +43,7 @@ const DEFAULT_PRICE_GUIDE_PATH = "/Users/Antonin/Downloads/price_guide_6.json";
 const singlesPath = process.argv[2] || DEFAULT_SINGLES_PATH;
 const nonSinglesPath = process.argv[3] || DEFAULT_NONSINGLES_PATH;
 const priceGuidePath = process.argv[4] || DEFAULT_PRICE_GUIDE_PATH;
+const withCardsRefLegacy = process.argv.includes("--with-cards-ref-legacy");
 
 const BATCH_SIZE = 1000;
 const SOURCE = "cm_price_guide_import";
@@ -66,6 +69,127 @@ function normalizeWhitespace(value) {
 function normalizeCardName(rawName) {
   const cleaned = normalizeWhitespace(rawName).replace(/\[[^\]]*\]/g, "").trim();
   return cleaned || normalizeWhitespace(rawName);
+}
+
+function inferCardNumber(product) {
+  const name = normalizeWhitespace(product?.name);
+  const collector = normalizeWhitespace(product?.collectorNumber || product?.number);
+  if (collector) return collector;
+  const slash = name.match(/\b(\d{1,3}\s*\/\s*\d{2,3})\b/)?.[1];
+  if (slash) return slash.replace(/\s+/g, "");
+  const hash = name.match(/#\s?(\d{1,3})\b/)?.[1];
+  return hash || null;
+}
+
+function inferHp(product) {
+  const direct = Number(product?.hp ?? 0);
+  if (Number.isFinite(direct) && direct > 0) return Math.round(direct);
+  const name = normalizeWhitespace(product?.name);
+  const fromName = Number(name.match(/\b(?:HP|PV)\s*[:.]?\s*(\d{2,4})\b/i)?.[1] ?? 0);
+  if (Number.isFinite(fromName) && fromName > 0) return Math.round(fromName);
+  return null;
+}
+
+function inferLanguage(product) {
+  const raw = normalizeWhitespace(
+    product?.language || product?.languageName || product?.locale || product?.name,
+  ).toLowerCase();
+  if (/(japanese|japonais|\bjp\b|ポケモン|トレーナー)/.test(raw)) return "jp";
+  if (/(french|francais|\bfr\b)/.test(raw)) return "fr";
+  if (/(english|\ben\b)/.test(raw)) return "en";
+  return null;
+}
+
+function inferRarity(product) {
+  const raw = normalizeWhitespace(product?.rarity || product?.name).toLowerCase();
+  if (/\b★★★\b|special illustration rare|\bsir\b/.test(raw)) return "SIR";
+  if (/\b★★\b|illustration rare|\bir\b/.test(raw)) return "IR";
+  if (/ultra rare|\bur\b|vmax|gx| ex\b/.test(raw)) return "ULTRA_RARE";
+  if (/promo|black star/.test(raw)) return "PROMO";
+  if (/radiant|radieux/.test(raw)) return "RADIANT";
+  if (/amazing rare/.test(raw)) return "AMAZING_RARE";
+  if (/holo/.test(raw)) return "HOLO_RARE";
+  if (/rare/.test(raw)) return "RARE";
+  if (/uncommon|peu commune/.test(raw)) return "UNCOMMON";
+  if (/common|commune/.test(raw)) return "COMMON";
+  return null;
+}
+
+function inferFinish(product) {
+  const raw = normalizeWhitespace(product?.name).toLowerCase();
+  if (/full art|pleine illustration/.test(raw)) return "FULL_ART";
+  if (/textur|etched/.test(raw)) return "TEXTURED";
+  if (/reverse|inverse/.test(raw)) return "REVERSE_HOLO";
+  if (/cosmos|swirl/.test(raw)) return "COSMOS";
+  if (/cracked ice|glace brisee/.test(raw)) return "CRACKED_ICE";
+  if (/holo/.test(raw)) return "HOLO";
+  if (/non holo|non-holo|sans holo/.test(raw)) return "NON_HOLO";
+  return null;
+}
+
+function inferVintageHint(product) {
+  const raw = normalizeWhitespace(product?.name).toLowerCase();
+  if (/1st edition|edition 1/.test(raw)) return "1ST_EDITION";
+  if (/shadowless|sans ombre/.test(raw)) return "SHADOWLESS";
+  if (/unlimited|illimitee/.test(raw)) return "UNLIMITED";
+  return null;
+}
+
+function inferRegulationMark(product) {
+  const raw = normalizeWhitespace(
+    product?.regulationMark || product?.regulation || product?.name,
+  );
+  return raw.match(/\b([EFGH])\b/)?.[1] || null;
+}
+
+function inferIllustrator(product) {
+  const direct = normalizeWhitespace(product?.illustrator || product?.artist);
+  if (direct) return direct;
+  const fromName = normalizeWhitespace(product?.name).match(/\b(?:illus\.?|artist)\s*[:.]?\s*([^\n,]{2,60})/i)?.[1];
+  return fromName ? normalizeWhitespace(fromName) : null;
+}
+
+function inferEstimatedCondition(product) {
+  const raw = normalizeWhitespace(product?.condition || product?.name).toUpperCase();
+  if (/\bMINT\b/.test(raw)) return "MINT";
+  if (/NEAR[ _-]?MINT|\bNM\b/.test(raw)) return "NEAR_MINT";
+  if (/\bEXCELLENT\b|\bEX\b/.test(raw)) return "EXCELLENT";
+  if (/\bGOOD\b/.test(raw)) return "GOOD";
+  if (/LIGHT[ _-]?PLAYED|\bLP\b/.test(raw)) return "LIGHT_PLAYED";
+  if (/\bPLAYED\b|\bMP\b/.test(raw)) return "PLAYED";
+  if (/\bPOOR\b|DAMAGED/.test(raw)) return "POOR";
+  return null;
+}
+
+function inferReleaseYear(product) {
+  const candidates = [
+    product?.releaseYear,
+    product?.year,
+    product?.releaseDate,
+    product?.date,
+    product?.createdAt,
+  ];
+
+  for (const candidate of candidates) {
+    if (candidate === null || candidate === undefined) continue;
+    const text = String(candidate);
+    const year = Number(text.match(/\b(19\d{2}|20\d{2})\b/)?.[1] ?? 0);
+    if (Number.isFinite(year) && year >= 1995 && year <= 2100) return year;
+  }
+  return null;
+}
+
+function inferIsSecret(cardNumber) {
+  if (!cardNumber || !cardNumber.includes("/")) return null;
+  const [left, right] = cardNumber.split("/").map((part) => Number(part));
+  if (!Number.isFinite(left) || !Number.isFinite(right)) return null;
+  return left > right;
+}
+
+function inferIsPromo(product) {
+  const raw = normalizeWhitespace(product?.name).toLowerCase();
+  if (/promo|black star|\bswsh\d{2,4}\b|\bsvp\b/.test(raw)) return true;
+  return null;
 }
 
 function inferSetLabel(product) {
@@ -172,16 +296,37 @@ async function run() {
     const tcgId = `cm-${idProduct}`;
     const name = normalizeCardName(product?.name);
     const setId = inferSetLabel(product);
+    const cardNumber = inferCardNumber(product);
     cardsRefByTcgId.set(tcgId, {
       tcg_id: tcgId,
       name,
       set_id: setId,
       image_url: null,
+      card_number: cardNumber,
+      hp: inferHp(product),
+      rarity: inferRarity(product),
+      finish: inferFinish(product),
+      is_secret: inferIsSecret(cardNumber),
+      is_promo: inferIsPromo(product),
+      vintage_hint: inferVintageHint(product),
+      regulation_mark: inferRegulationMark(product),
+      illustrator: inferIllustrator(product),
+      estimated_condition: inferEstimatedCondition(product),
+      language: inferLanguage(product),
+      release_year: inferReleaseYear(product),
+      metadata: {
+        source_product_id: idProduct,
+        source_category_id: Number(product?.idCategory ?? 0) || null,
+        source_expansion_id: Number(product?.idExpansion ?? 0) || null,
+      },
     });
   }
 
-  const cardsRefRows = Array.from(cardsRefByTcgId.values());
-  const cardsRefCount = await upsertCardsRef(cardsRefRows);
+  let cardsRefCount = 0;
+  if (withCardsRefLegacy) {
+    const cardsRefRows = Array.from(cardsRefByTcgId.values());
+    cardsRefCount = await upsertCardsRef(cardsRefRows);
+  }
 
   // price estimations for all guide rows that can map to a product + valid price
   const priceRowsByKey = new Map();
@@ -216,7 +361,7 @@ async function run() {
   console.log(`- products_singles rows: ${singlesProducts.length}`);
   console.log(`- products_nonsingles rows: ${nonSinglesProducts.length}`);
   console.log(`- price guide rows: ${guideRows.length}`);
-  console.log(`- cards_ref upserted: ${cardsRefCount}`);
+  console.log(`- cards_ref upserted (legacy mode): ${cardsRefCount}`);
   console.log(`- price_estimations upserted: ${priceCount}`);
 }
 

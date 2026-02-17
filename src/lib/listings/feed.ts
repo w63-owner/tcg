@@ -63,7 +63,9 @@ export async function fetchCardRefIdsByQuery(supabase: SupabaseClient, query: st
   const { data } = await supabase
     .from("cards_ref")
     .select("id")
-    .or(`name.ilike.%${term}%,set_id.ilike.%${term}%,tcg_id.ilike.%${term}%`)
+    .or(
+      `name.ilike.%${term}%,set_id.ilike.%${term}%,tcg_id.ilike.%${term}%,card_number.ilike.%${term}%,language.ilike.%${term}%,release_year.ilike.%${term}%`,
+    )
     .limit(2000);
 
   return (data ?? []).map((row) => row.id as string);

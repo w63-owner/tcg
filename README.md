@@ -21,6 +21,13 @@ Create `.env.local` from `.env.example` and set:
 - `STRIPE_WEBHOOK_SECRET` (for webhook validation)
 - `OPENAI_API_KEY` (server-only, used by OCR endpoint)
 - `OCR_OPENAI_MODEL` (optional, default: `gpt-4.1-mini`)
+- `POKEMON_TCG_API_KEY` (optional, recommended for higher rate limits)
+- `POKEMON_TCG_API_BASE_URL` (default: `https://api.pokemontcg.io/v2/cards`)
+- `POKECADATA_API_KEY` (optional, for JP source when required)
+- `POKECADATA_BASE_URL` (optional, enables JP source sync)
+- `CATALOG_SYNC_SOURCES` (default: `pokemontcg,pokecadata`)
+- `CATALOG_SYNC_PAGE_SIZE` (default: `250`)
+- `CATALOG_SYNC_MAX_PAGES` (default: `200`, reduced in incremental mode)
 
 OCR endpoint:
 
@@ -43,9 +50,25 @@ npm run build
 ```bash
 npm run seed:listings          # demo listings seed
 npm run seed:listings:massive  # 120 demo listings
+npm run seed:cards-catalog     # cards_ref exhaustive attrs + price guide import
+npm run seed:cards-catalog:incremental  # lighter sync for regular refresh
+npm run seed:price-guide       # pricing-only import from local JSON exports
 npm run stress:auth            # auth stress test
 npm run rls:audit              # RLS intrusion smoke checks
 ```
+
+`cards_ref` now supports expert catalog attributes used by OCR and matching:
+
+- identity: `name`, `set_id`, `tcg_id`, `card_number`, `hp`, `release_year`, `language`
+- rarity/finish: `rarity`, `finish`, `is_secret`, `is_promo`, `vintage_hint`
+- expert fields: `regulation_mark`, `illustrator`, `estimated_condition`
+- extensibility: `metadata` (jsonb)
+
+Catalog sync internals:
+
+- staging raw payloads: `catalog_source_cards_raw`
+- normalized rows: `catalog_source_cards_normalized`
+- run/audit metrics: `catalog_import_runs`
 
 Scripts are blocked in production unless explicitly allowed with:
 

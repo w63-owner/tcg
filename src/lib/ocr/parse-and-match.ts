@@ -19,6 +19,8 @@ export type CardRefCandidate = {
   name: string;
   set: string;
   tcgId?: string | null;
+  cardNumber?: string | null;
+  language?: string | null;
   score: number;
 };
 
@@ -27,6 +29,10 @@ export type CardRefLookupRow = {
   name: string;
   set_id: string;
   tcg_id: string | null;
+  card_number?: string | null;
+  language?: string | null;
+  rarity?: string | null;
+  finish?: string | null;
 };
 
 function normalize(value: string) {
@@ -232,6 +238,10 @@ export function rankCardRefCandidates(params: {
       const rowName = normalize(row.name);
       const rowSet = normalize(row.set_id);
       const rowTcg = normalize(row.tcg_id ?? "");
+      const rowCardNumber = normalize(row.card_number ?? "");
+      const rowLanguage = normalize(row.language ?? "");
+      const rowRarity = normalize(row.rarity ?? "");
+      const rowFinish = normalize(row.finish ?? "");
 
       if (parsed.name) {
         if (rowName === normalize(parsed.name)) score += 0.55;
@@ -246,11 +256,23 @@ export function rankCardRefCandidates(params: {
       }
 
       if (normalizedCardNumber) {
-        if (rowTcg.includes(normalizedCardNumber)) score += 0.3;
+        if (rowCardNumber.includes(normalizedCardNumber) || rowTcg.includes(normalizedCardNumber)) {
+          score += 0.3;
+        }
       }
 
       if (normalizedRaw.includes(rowName) && rowName.length >= 4) {
         score += 0.12;
+      }
+
+      if (parsed.language && rowLanguage === normalize(parsed.language)) {
+        score += 0.05;
+      }
+      if (parsed.rarity && rowRarity && rowRarity.includes(normalize(parsed.rarity))) {
+        score += 0.04;
+      }
+      if (parsed.finish && rowFinish && rowFinish.includes(normalize(parsed.finish))) {
+        score += 0.04;
       }
 
       // Learning boost from historical manual selections for this card_ref.
@@ -261,6 +283,8 @@ export function rankCardRefCandidates(params: {
         name: row.name,
         set: row.set_id,
         tcgId: row.tcg_id,
+        cardNumber: row.card_number,
+        language: row.language,
         score: Math.min(0.99, Math.max(0, Number(score.toFixed(4)))),
       } satisfies CardRefCandidate;
     })
