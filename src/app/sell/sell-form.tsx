@@ -34,6 +34,17 @@ const CONDITIONS = [
 const GRADING_COMPANIES = ["PSA", "PCA", "BGS", "CGC", "SGC", "ACE", "OTHER"] as const;
 const WEIGHT_CLASSES = ["XS", "S", "M", "L", "XL"] as const;
 
+type OcrCandidate = {
+  cardRefId: string;
+  name: string;
+  set: string;
+  tcgId?: string | null;
+  score: number;
+};
+
+const OCR_HIGH_CONFIDENCE_THRESHOLD = 0.75;
+const OCR_MEDIUM_CONFIDENCE_THRESHOLD = 0.5;
+
 function mapGradeToCondition(grade: number) {
   if (grade >= 10) return "MINT";
   if (grade >= 9) return "NEAR_MINT";
@@ -61,6 +72,13 @@ export function SellForm() {
   const [cameraError, setCameraError] = useState("");
   const [capturedPreviewUrl, setCapturedPreviewUrl] = useState<string | null>(null);
   const [capturedFile, setCapturedFile] = useState<File | null>(null);
+  const [ocrAttemptId, setOcrAttemptId] = useState("");
+  const [ocrSelectedCardRefId, setOcrSelectedCardRefId] = useState("");
+  const [ocrCandidates, setOcrCandidates] = useState<OcrCandidate[]>([]);
+  const [ocrConfidence, setOcrConfidence] = useState(0);
+  const [ocrError, setOcrError] = useState("");
+  const [ocrHint, setOcrHint] = useState("");
+  const [isOcrLoading, setIsOcrLoading] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const frontInputRef = useRef<HTMLInputElement | null>(null);
@@ -154,6 +172,80 @@ export function SellForm() {
     }
   };
 
+  const runOcrDetection = async (file: File) => {
+    if (isOcrLoading) return;
+    setIsOcrLoading(true);
+    setOcrError("");
+    setOcrHint("");
+
+    const syncOcrSelection = async (attemptId: string, selectedCardRefId: string) => {
+      if (!attemptId || !selectedCardRefId) return;
+      try {
+        await fetch("/api/ocr/card/selection", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ attemptId, selectedCardRefId }),
+        });
+      } catch {
+        // Best-effort analytics update only.
+      }
+    };
+
+    try {
+      const payload = new FormData();
+      payload.set("image", file);
+
+      const response = await fetch("/api/ocr/card", {
+        method: "POST",
+        body: payload,
+      });
+      const json = (await response.json()) as {
+        error?: string;
+        attemptId?: string | null;
+        confidence?: number;
+        parsed?: { name?: string };
+        candidates?: OcrCandidate[];
+      };
+
+      if (!response.ok) {
+        setOcrError(json.error ?? "OCR indisponible.");
+        return;
+      }
+
+      const candidates = Array.isArray(json.candidates) ? json.candidates : [];
+      const top = candidates[0];
+      const confidence = Number(json.confidence ?? 0);
+      const attemptId = json.attemptId ?? "";
+      setOcrCandidates(candidates);
+      setOcrConfidence(confidence);
+      setOcrAttemptId(attemptId);
+
+      if (top) {
+        setOcrSelectedCardRefId(top.cardRefId);
+        void syncOcrSelection(attemptId, top.cardRefId);
+      }
+
+      if (confidence >= OCR_HIGH_CONFIDENCE_THRESHOLD) {
+        setOcrHint("Confiance elevee: pre-remplissage automatique, corrige si besoin.");
+      } else if (confidence >= OCR_MEDIUM_CONFIDENCE_THRESHOLD) {
+        setOcrHint("Confiance moyenne: verifie les suggestions avant publication.");
+      } else {
+        setOcrHint("Confiance faible: complete manuellement, suggestions fournies.");
+      }
+
+      if (!titleValue.trim() && confidence >= OCR_HIGH_CONFIDENCE_THRESHOLD) {
+        const detectedTitle = json.parsed?.name?.trim() || top?.name?.trim();
+        if (detectedTitle) {
+          setTitleValue(detectedTitle);
+        }
+      }
+    } catch {
+      setOcrError("OCR indisponible pour le moment.");
+    } finally {
+      setIsOcrLoading(false);
+    }
+  };
+
   const assignFileToInput = (input: HTMLInputElement | null, file: File) => {
     if (!input) return;
     const transfer = new DataTransfer();
@@ -206,6 +298,7 @@ export function SellForm() {
     if (cameraSide === "front") {
       assignFileToInput(frontInputRef.current, capturedFile);
       setFrontSelected(true);
+      void runOcrDetection(capturedFile);
       setCameraSide("back");
       onRetake();
       return;
@@ -285,6 +378,8 @@ export function SellForm() {
           <input type="hidden" name="grading_company" value={gradingCompanyValue} />
           <input type="hidden" name="grade_note" value={gradeValue} />
           <input type="hidden" name="delivery_weight_class" value={deliveryWeightClassValue} />
+          <input type="hidden" name="card_ref_id" value={ocrSelectedCardRefId} />
+          <input type="hidden" name="ocr_attempt_id" value={ocrAttemptId} />
           <div className="hidden">
             <input
               ref={frontInputRef}
@@ -321,6 +416,62 @@ export function SellForm() {
                   value={titleValue}
                   onChange={(event) => setTitleValue(event.target.value)}
                 />
+              </div>
+
+              <div className="space-y-2 rounded-md border p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium">Detection OCR</p>
+                  {isOcrLoading ? (
+                    <span className="text-muted-foreground text-xs">Analyse...</span>
+                  ) : (
+                    <span className="text-muted-foreground text-xs">
+                      Confiance: {Math.round(ocrConfidence * 100)}%
+                    </span>
+                  )}
+                </div>
+                {ocrError ? (
+                  <p className="text-destructive text-xs">{ocrError}</p>
+                ) : null}
+                {ocrHint ? <p className="text-muted-foreground text-xs">{ocrHint}</p> : null}
+                {ocrCandidates.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {ocrCandidates.map((candidate) => (
+                      <Button
+                        key={candidate.cardRefId}
+                        type="button"
+                        variant={
+                          ocrSelectedCardRefId === candidate.cardRefId
+                            ? "default"
+                            : "outline"
+                        }
+                        className="h-auto max-w-full px-2 py-1 text-left"
+                        onClick={() => {
+                          setOcrSelectedCardRefId(candidate.cardRefId);
+                          setTitleValue(candidate.name);
+                          if (ocrAttemptId) {
+                            void fetch("/api/ocr/card/selection", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                attemptId: ocrAttemptId,
+                                selectedCardRefId: candidate.cardRefId,
+                              }),
+                            }).catch(() => undefined);
+                          }
+                        }}
+                      >
+                        <span className="truncate text-xs">
+                          {candidate.name} · {candidate.set} ·{" "}
+                          {Math.round(candidate.score * 100)}%
+                        </span>
+                      </Button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground text-xs">
+                    Aucune suggestion fiable. Tu peux saisir manuellement.
+                  </p>
+                )}
               </div>
 
               <div className="space-y-3 rounded-md border p-3">

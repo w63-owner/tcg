@@ -19,6 +19,13 @@ Create `.env.local` from `.env.example` and set:
 - `NEXT_PUBLIC_SITE_URL` (default local: `http://localhost:3000`)
 - `STRIPE_SECRET_KEY` (for checkout flows)
 - `STRIPE_WEBHOOK_SECRET` (for webhook validation)
+- `OPENAI_API_KEY` (server-only, used by OCR endpoint)
+- `OCR_OPENAI_MODEL` (optional, default: `gpt-4.1-mini`)
+
+OCR endpoint:
+
+- `POST /api/ocr/card` expects a multipart form field `image`.
+- The API key stays server-side only (never exposed in client bundle).
 
 ## Useful commands
 

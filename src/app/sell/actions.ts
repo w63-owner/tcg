@@ -66,8 +66,14 @@ export async function createListingAction(
       formData.get("grading_company") ?? "",
     ).toUpperCase();
     const gradeNote = Number(formData.get("grade_note") ?? 0);
+    const cardRefId = String(formData.get("card_ref_id") ?? "").trim();
+    const ocrAttemptId = String(formData.get("ocr_attempt_id") ?? "").trim();
     const frontImage = formData.get("front_image");
     const backImage = formData.get("back_image");
+    const isUuid = (value: string) =>
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        value,
+      );
 
     if (title.length < 3 || title.length > 140) {
       return {
@@ -124,6 +130,7 @@ export async function createListingAction(
 
     const payload = {
       seller_id: user.id,
+      card_ref_id: isUuid(cardRefId) ? cardRefId : null,
       title,
       price_seller: priceSeller,
       condition: isGraded ? null : condition,
@@ -147,6 +154,17 @@ export async function createListingAction(
         status: "error",
         message: `Impossible de creer l'annonce: ${error.message}`,
       };
+    }
+
+    if (isUuid(ocrAttemptId)) {
+      await supabase
+        .from("ocr_attempts")
+        .update({
+          listing_id: data.id,
+          selected_card_ref_id: isUuid(cardRefId) ? cardRefId : null,
+        })
+        .eq("id", ocrAttemptId)
+        .eq("user_id", user.id);
     }
 
     revalidatePath("/");
