@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
+import { formatConditionLabel } from "@/lib/listings/condition-label";
 
 type SavedSearchSummary = {
   id: string;
@@ -68,7 +69,7 @@ export function MarketplaceSearchPageForm({
 
     const criteria: string[] = [];
     if (setFilter) criteria.push(setFilter);
-    if (condition) criteria.push(condition);
+    if (condition) criteria.push(formatConditionLabel(condition));
     if (isGraded === "1") criteria.push("Gradee");
     if (isGraded === "0") criteria.push("Non gradee");
     if (gradeMin || gradeMax) criteria.push(`${gradeMin || "1"}-${gradeMax || "10"}`);

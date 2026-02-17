@@ -20,6 +20,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { createListingAction } from "./actions";
 import { initialSellFormState } from "./sell-form-state";
+import { formatConditionLabel } from "@/lib/listings/condition-label";
 
 const CONDITIONS = [
   "MINT",
@@ -507,7 +508,7 @@ export function SellForm() {
                     {ocrParsed.rarity ? <span>Rarete: {ocrParsed.rarity}</span> : null}
                     {ocrParsed.finish ? <span>Finition: {ocrParsed.finish}</span> : null}
                     {ocrParsed.estimatedCondition ? (
-                      <span>Etat estime: {ocrParsed.estimatedCondition}</span>
+                      <span>Etat estime: {formatConditionLabel(ocrParsed.estimatedCondition)}</span>
                     ) : null}
                   </div>
                 ) : null}
@@ -572,7 +573,10 @@ export function SellForm() {
                           <span>Regulation: {selectedOcrCandidate.regulationMark || "-"}</span>
                           <span>Illustrateur: {selectedOcrCandidate.illustrator || "-"}</span>
                           <span>
-                            Etat estime: {selectedOcrCandidate.estimatedCondition || "-"}
+                            Etat estime:{" "}
+                            {selectedOcrCandidate.estimatedCondition
+                              ? formatConditionLabel(selectedOcrCandidate.estimatedCondition)
+                              : "-"}
                           </span>
                           <span>Annee: {selectedOcrCandidate.releaseYear ?? "-"}</span>
                           <span className="col-span-2">
@@ -634,7 +638,7 @@ export function SellForm() {
                       />
                       <p className="text-xs text-muted-foreground">
                         Etat calcule automatiquement:{" "}
-                        <span className="font-medium">{derivedCondition}</span>
+                        <span className="font-medium">{formatConditionLabel(derivedCondition)}</span>
                       </p>
                     </div>
                   </div>
@@ -652,7 +656,7 @@ export function SellForm() {
                       <SelectContent>
                         {CONDITIONS.map((condition) => (
                           <SelectItem key={condition} value={condition}>
-                            {condition}
+                            {formatConditionLabel(condition)}
                           </SelectItem>
                         ))}
                       </SelectContent>

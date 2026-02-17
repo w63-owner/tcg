@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { FavoriteListingToggle } from "./favorite-listing-toggle";
 import { calculateDisplayPrice } from "@/lib/pricing";
+import { formatConditionLabel } from "@/lib/listings/condition-label";
 
 type CardItemProps = {
   id: string;
@@ -64,7 +65,9 @@ export function CardItem({
           {title}
         </Link>
         <div className="flex flex-wrap gap-1">
-          <Badge variant="secondary">{isGraded ? "Graded" : condition || "Raw"}</Badge>
+          <Badge variant="secondary">
+            {isGraded ? "Graded" : formatConditionLabel(condition) || "Raw"}
+          </Badge>
           {isGraded && gradeNote ? <Badge variant="outline">Note {gradeNote}</Badge> : null}
         </div>
       </CardContent>

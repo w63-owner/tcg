@@ -15,6 +15,23 @@ function sanitizeLookupToken(value: string) {
   return value.replace(/[^a-zA-Z0-9/-]/g, "").trim();
 }
 
+function toClientOcrErrorMessage(message: string) {
+  const normalized = message.toLowerCase();
+  if (normalized.includes("openai_api_key")) {
+    return "OCR misconfigure: OPENAI_API_KEY manquante.";
+  }
+  if (normalized.includes("429")) {
+    return "OCR indisponible: quota OpenAI atteinte (429).";
+  }
+  if (normalized.includes("abort") || normalized.includes("timeout")) {
+    return "OCR indisponible: delai de reponse depasse. Reessaie.";
+  }
+  if (normalized.includes("empty text")) {
+    return "OCR n'a detecte aucun texte exploitable.";
+  }
+  return "OCR processing failed";
+}
+
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
@@ -172,11 +189,12 @@ export async function POST(request: Request) {
       ],
     });
   } catch (error) {
+    const message = error instanceof Error ? error.message : "Unexpected error";
     logError({
       event: "ocr_card_route_exception",
-      message: error instanceof Error ? error.message : "Unexpected error",
+      message,
     });
-    return NextResponse.json({ error: "OCR processing failed" }, { status: 500 });
+    return NextResponse.json({ error: toClientOcrErrorMessage(message) }, { status: 500 });
   }
 }
 

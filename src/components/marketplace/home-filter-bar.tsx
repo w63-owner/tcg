@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { formatConditionLabel } from "@/lib/listings/condition-label";
 
 type HomeFilterBarProps = {
   query: string;
@@ -56,13 +57,13 @@ function FilterFields({
         className="border-input h-9 rounded-md border bg-transparent px-3 text-sm"
       >
         <option value="">Tous les etats</option>
-        <option value="MINT">MINT</option>
-        <option value="NEAR_MINT">NEAR_MINT</option>
-        <option value="EXCELLENT">EXCELLENT</option>
-        <option value="GOOD">GOOD</option>
-        <option value="LIGHT_PLAYED">LIGHT_PLAYED</option>
-        <option value="PLAYED">PLAYED</option>
-        <option value="POOR">POOR</option>
+        <option value="MINT">{formatConditionLabel("MINT")}</option>
+        <option value="NEAR_MINT">{formatConditionLabel("NEAR_MINT")}</option>
+        <option value="EXCELLENT">{formatConditionLabel("EXCELLENT")}</option>
+        <option value="GOOD">{formatConditionLabel("GOOD")}</option>
+        <option value="LIGHT_PLAYED">{formatConditionLabel("LIGHT_PLAYED")}</option>
+        <option value="PLAYED">{formatConditionLabel("PLAYED")}</option>
+        <option value="POOR">{formatConditionLabel("POOR")}</option>
       </select>
       <select
         name="is_graded"

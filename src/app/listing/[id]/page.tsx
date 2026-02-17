@@ -10,6 +10,7 @@ import { PriceHistoryCard } from "@/components/listing/price-history-card";
 import { startCheckoutAction } from "./actions";
 import { createConversationForListingAction } from "@/app/messages/actions";
 import { calculateDisplayPrice } from "@/lib/pricing";
+import { formatConditionLabel } from "@/lib/listings/condition-label";
 
 type ListingDetailsRow = {
   id: string;
@@ -147,7 +148,7 @@ export default async function ListingPage({
               </p>
             ) : (
               <p>
-                <span className="font-medium">Etat:</span> {listing.condition}
+                <span className="font-medium">Etat:</span> {formatConditionLabel(listing.condition)}
               </p>
             )}
           </div>
