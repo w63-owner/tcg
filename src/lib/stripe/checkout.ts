@@ -1,7 +1,9 @@
 import Stripe from "stripe";
 import { getRequiredEnvVar, getSiteUrl } from "@/lib/env";
 
-const stripeClient = new Stripe(getRequiredEnvVar("STRIPE_SECRET_KEY"));
+function getStripeClient() {
+  return new Stripe(getRequiredEnvVar("STRIPE_SECRET_KEY"));
+}
 
 type StripeCheckoutParams = {
   title: string;
@@ -15,6 +17,7 @@ type StripeCheckoutParams = {
 export async function createStripeCheckoutSession(params: StripeCheckoutParams) {
   const { title, totalAmount, transactionId, cancelPath, metadata, description } = params;
   const siteUrl = getSiteUrl();
+  const stripeClient = getStripeClient();
 
   return stripeClient.checkout.sessions.create({
     mode: "payment",
