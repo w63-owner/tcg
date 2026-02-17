@@ -49,7 +49,7 @@ export default async function PriceCheckingPage({
 
   return (
     <section className="space-y-4">
-      <header className="space-y-1">
+      <header className="space-y-2">
         <h1 className="text-2xl font-semibold">Price Checking</h1>
         <p className="text-muted-foreground text-sm">
           Reference de prix indicative basee sur `price_estimations`.

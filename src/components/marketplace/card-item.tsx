@@ -1,7 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { FavoriteListingToggle } from "./favorite-listing-toggle";
 import { calculateDisplayPrice } from "@/lib/pricing";
 import { formatConditionLabel } from "@/lib/listings/condition-label";
@@ -42,9 +41,9 @@ export function CardItem({
   const listingHref = href ?? `/listing/${id}`;
 
   return (
-    <Card className="group overflow-hidden py-0 transition-transform duration-200 hover:-translate-y-0.5">
+    <article className="group flex h-full flex-col overflow-hidden py-0 transition-transform duration-200 hover:-translate-y-0.5">
       <Link href={listingHref} className="block">
-        <div className="bg-muted aspect-[3/4] w-full">
+        <div className="bg-muted aspect-[63/88] w-full">
           {coverImageUrl ? (
             <Image
               src={coverImageUrl}
@@ -60,37 +59,39 @@ export function CardItem({
           )}
         </div>
       </Link>
-      <CardContent className="space-y-2 p-3">
-        <Link href={listingHref} className="line-clamp-2 text-sm font-semibold">
+      <section className="space-y-1 px-2.5 pt-1 pb-2">
+        <Link href={listingHref} className="block truncate text-sm font-semibold">
           {title}
         </Link>
         <div className="flex flex-wrap gap-1">
-          <Badge variant="secondary">
+          <Badge variant="secondary" className="text-[10px]">
             {isGraded ? "Graded" : formatConditionLabel(condition) || "Raw"}
           </Badge>
-          {isGraded && gradeNote ? <Badge variant="outline">Note {gradeNote}</Badge> : null}
+          {isGraded && gradeNote ? (
+            <Badge variant="outline" className="text-[10px]">
+              Note {gradeNote}
+            </Badge>
+          ) : null}
         </div>
-      </CardContent>
-      <CardFooter className="flex items-end justify-between gap-2 px-3 pb-3">
-        <div>
-          <p className="text-xl font-semibold tracking-tight">
+        <div className="flex items-end justify-between gap-2 border-t pt-1.5">
+          <p className="text-sm font-normal tracking-tight">
             {finalDisplayPrice.toFixed(2)} EUR
           </p>
+          <div className="flex items-center gap-1.5">
+            {showFavoriteToggle ? (
+              <FavoriteListingToggle
+                listingId={id}
+                initialLiked={initialFavorite}
+                initialCount={favoriteCount}
+              />
+            ) : (
+              <Badge variant="outline" className="h-8 min-w-8 justify-center rounded-full px-2">
+                {favoriteCount}
+              </Badge>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-1.5">
-          {showFavoriteToggle ? (
-            <FavoriteListingToggle
-              listingId={id}
-              initialLiked={initialFavorite}
-              initialCount={favoriteCount}
-            />
-          ) : (
-            <span className="text-muted-foreground inline-flex h-8 min-w-8 items-center justify-center rounded-full border px-2 text-xs">
-              {favoriteCount}
-            </span>
-          )}
-        </div>
-      </CardFooter>
-    </Card>
+      </section>
+    </article>
   );
 }

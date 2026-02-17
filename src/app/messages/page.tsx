@@ -132,7 +132,7 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
   return (
     <section className="space-y-4">
       <MessagesRealtimeListener />
-      <header className="space-y-1">
+      <header className="space-y-2">
         <h1 className="text-2xl font-semibold">Messages</h1>
       </header>
 

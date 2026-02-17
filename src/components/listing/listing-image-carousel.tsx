@@ -23,7 +23,7 @@ export function ListingImageCarousel({ images }: ListingImageCarouselProps) {
 
   if (validImages.length === 0) {
     return (
-      <div className="bg-muted aspect-[3/4]">
+      <div className="bg-muted aspect-[63/88]">
         <div className="text-muted-foreground flex h-full items-center justify-center text-sm">
           Pas de photo
         </div>
@@ -72,7 +72,7 @@ export function ListingImageCarousel({ images }: ListingImageCarouselProps) {
   return (
     <div className="space-y-2">
       <div
-        className="bg-muted relative aspect-[3/4] overflow-hidden select-none touch-pan-y"
+        className="bg-muted relative aspect-[63/88] overflow-hidden select-none touch-pan-y"
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
       >
@@ -80,8 +80,8 @@ export function ListingImageCarousel({ images }: ListingImageCarouselProps) {
           className="flex h-full w-full transition-transform duration-300 ease-out"
           style={{ transform: `translateX(-${clampedIndex * 100}%)` }}
         >
-          {validImages.map((image) => (
-            <div key={image.src} className="relative h-full w-full shrink-0">
+          {validImages.map((image, imageIndex) => (
+            <div key={`${image.src}-${imageIndex}`} className="relative h-full w-full shrink-0">
               <Image src={image.src} alt={image.alt} fill className="object-cover" />
             </div>
           ))}
@@ -121,7 +121,7 @@ export function ListingImageCarousel({ images }: ListingImageCarouselProps) {
             >
               <span
                 className={`h-2 w-2 rounded-full ${
-                  dotIndex === clampedIndex ? "bg-sky-500" : "bg-muted-foreground/50"
+                  dotIndex === clampedIndex ? "bg-primary" : "bg-muted-foreground/50"
                 }`}
               />
             </button>

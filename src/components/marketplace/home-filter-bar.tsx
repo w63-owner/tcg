@@ -1,9 +1,17 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { formatConditionLabel } from "@/lib/listings/condition-label";
 
 type HomeFilterBarProps = {
@@ -19,6 +27,8 @@ type HomeFilterBarProps = {
   setOptions: string[];
 };
 
+const ALL_OPTION = "__all__";
+
 function FilterFields({
   query,
   setFilter,
@@ -31,6 +41,11 @@ function FilterFields({
   sort,
   setOptions,
 }: HomeFilterBarProps) {
+  const [setValue, setSetValue] = useState(setFilter);
+  const [conditionValue, setConditionValue] = useState(condition);
+  const [gradedValue, setGradedValue] = useState(isGraded);
+  const [sortValue, setSortValue] = useState(sort || "date_desc");
+
   return (
     <>
       <Input
@@ -39,57 +54,76 @@ function FilterFields({
         placeholder="Nom de la carte, numero (ex : Dracaufeu 4/102)"
         className="xl:col-span-2"
       />
-      <select
-        name="set"
-        defaultValue={setFilter}
-        className="border-input h-9 rounded-md border bg-transparent px-3 text-sm"
+      <input type="hidden" name="set" value={setValue} />
+      <Select
+        value={setValue || ALL_OPTION}
+        onValueChange={(value) => setSetValue(value === ALL_OPTION ? "" : value)}
       >
-        <option value="">Tous les sets</option>
-        {setOptions.map((setId) => (
-          <option key={setId} value={setId}>
-            {setId}
-          </option>
-        ))}
-      </select>
-      <select
-        name="condition"
-        defaultValue={condition}
-        className="border-input h-9 rounded-md border bg-transparent px-3 text-sm"
+        <SelectTrigger className="w-full">
+          <SelectValue placeholder="Tous les sets" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={ALL_OPTION}>Tous les sets</SelectItem>
+          {setOptions.map((setId) => (
+            <SelectItem key={setId} value={setId}>
+              {setId}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <input type="hidden" name="condition" value={conditionValue} />
+      <Select
+        value={conditionValue || ALL_OPTION}
+        onValueChange={(value) => setConditionValue(value === ALL_OPTION ? "" : value)}
       >
-        <option value="">Tous les etats</option>
-        <option value="MINT">{formatConditionLabel("MINT")}</option>
-        <option value="NEAR_MINT">{formatConditionLabel("NEAR_MINT")}</option>
-        <option value="EXCELLENT">{formatConditionLabel("EXCELLENT")}</option>
-        <option value="GOOD">{formatConditionLabel("GOOD")}</option>
-        <option value="LIGHT_PLAYED">{formatConditionLabel("LIGHT_PLAYED")}</option>
-        <option value="PLAYED">{formatConditionLabel("PLAYED")}</option>
-        <option value="POOR">{formatConditionLabel("POOR")}</option>
-      </select>
-      <select
-        name="is_graded"
-        defaultValue={isGraded}
-        className="border-input h-9 rounded-md border bg-transparent px-3 text-sm"
+        <SelectTrigger className="w-full">
+          <SelectValue placeholder="Tous les etats" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={ALL_OPTION}>Tous les etats</SelectItem>
+          <SelectItem value="MINT">{formatConditionLabel("MINT")}</SelectItem>
+          <SelectItem value="NEAR_MINT">{formatConditionLabel("NEAR_MINT")}</SelectItem>
+          <SelectItem value="EXCELLENT">{formatConditionLabel("EXCELLENT")}</SelectItem>
+          <SelectItem value="GOOD">{formatConditionLabel("GOOD")}</SelectItem>
+          <SelectItem value="LIGHT_PLAYED">{formatConditionLabel("LIGHT_PLAYED")}</SelectItem>
+          <SelectItem value="PLAYED">{formatConditionLabel("PLAYED")}</SelectItem>
+          <SelectItem value="POOR">{formatConditionLabel("POOR")}</SelectItem>
+        </SelectContent>
+      </Select>
+
+      <input type="hidden" name="is_graded" value={gradedValue} />
+      <Select
+        value={gradedValue || ALL_OPTION}
+        onValueChange={(value) => setGradedValue(value === ALL_OPTION ? "" : value)}
       >
-        <option value="">Gradee + non gradee</option>
-        <option value="1">Seulement gradees</option>
-        <option value="0">Seulement non gradees</option>
-      </select>
+        <SelectTrigger className="w-full">
+          <SelectValue placeholder="Gradee + non gradee" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={ALL_OPTION}>Gradee + non gradee</SelectItem>
+          <SelectItem value="1">Seulement gradees</SelectItem>
+          <SelectItem value="0">Seulement non gradees</SelectItem>
+        </SelectContent>
+      </Select>
       <Input name="grade_min" defaultValue={gradeMin} placeholder="Note min" type="number" min="1" max="10" step="0.5" />
       <Input name="grade_max" defaultValue={gradeMax} placeholder="Note max" type="number" min="1" max="10" step="0.5" />
       <Input name="price_min" defaultValue={priceMin} placeholder="Prix min" type="number" min="0" step="0.01" />
       <Input name="price_max" defaultValue={priceMax} placeholder="Prix max" type="number" min="0" step="0.01" />
-      <select
-        name="sort"
-        defaultValue={sort}
-        className="border-input h-9 rounded-md border bg-transparent px-3 text-sm"
-      >
-        <option value="date_desc">Plus recent</option>
-        <option value="date_asc">Plus ancien</option>
-        <option value="price_asc">Prix croissant</option>
-        <option value="price_desc">Prix decroissant</option>
-        <option value="grade_desc">Note decroissante</option>
-        <option value="grade_asc">Note croissante</option>
-      </select>
+      <input type="hidden" name="sort" value={sortValue} />
+      <Select value={sortValue} onValueChange={setSortValue}>
+        <SelectTrigger className="w-full">
+          <SelectValue placeholder="Tri" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="date_desc">Plus recent</SelectItem>
+          <SelectItem value="date_asc">Plus ancien</SelectItem>
+          <SelectItem value="price_asc">Prix croissant</SelectItem>
+          <SelectItem value="price_desc">Prix decroissant</SelectItem>
+          <SelectItem value="grade_desc">Note decroissante</SelectItem>
+          <SelectItem value="grade_asc">Note croissante</SelectItem>
+        </SelectContent>
+      </Select>
     </>
   );
 }
@@ -112,18 +146,23 @@ export function HomeFilterBar(props: HomeFilterBarProps) {
   return (
     <div className="space-y-2">
       <div className="md:hidden">
-        <Link
-          href={triggerHref}
-          aria-label="Ouvrir la recherche et les filtres"
-          className="file:text-foreground placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground dark:bg-input/30 border-input flex h-9 w-full min-w-0 items-center gap-2 rounded-md border bg-transparent px-3 py-1 text-sm shadow-xs transition-[color,box-shadow] outline-none md:text-sm"
+        <Button
+          asChild
+          variant="outline"
+          className="h-9 w-full justify-start px-3 text-sm font-normal shadow-none"
         >
-          <Search className="text-muted-foreground h-4 w-4 shrink-0" />
-          {props.query || "Nom de la carte, numero (ex : Dracaufeu 4/102)"}
-        </Link>
+          <Link href={triggerHref} aria-label="Ouvrir la recherche et les filtres">
+            <Search className="text-muted-foreground h-4 w-4 shrink-0" />
+            {props.query || "Nom de la carte, numero (ex : Dracaufeu 4/102)"}
+          </Link>
+        </Button>
       </div>
 
       <form className="hidden gap-2 md:grid md:grid-cols-2 xl:grid-cols-4">
-        <FilterFields {...props} />
+        <FilterFields
+          key={`${props.setFilter}|${props.condition}|${props.isGraded}|${props.sort}`}
+          {...props}
+        />
         <input type="hidden" name="page" value="1" />
         <Button type="submit">Rechercher</Button>
       </form>

@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Heart } from "lucide-react";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 
 type FavoriteListingToggleProps = {
   listingId: string;
@@ -57,19 +58,20 @@ export function FavoriteListingToggle({
   };
 
   return (
-    <button
+    <Button
       type="button"
       onClick={onToggle}
       disabled={isPending}
       aria-label={liked ? "Retirer des favoris" : "Ajouter aux favoris"}
-      className={`inline-flex h-8 min-w-12 items-center justify-center gap-1 rounded-full border px-2 text-xs transition-all duration-200 ${
+      variant={liked ? "secondary" : "outline"}
+      className={`h-8 min-w-12 gap-1 rounded-full px-2 text-xs transition-all duration-200 ${
         liked
-          ? "border-red-500/50 bg-red-500/10 text-red-600 shadow-sm"
-          : "border-border bg-background text-muted-foreground hover:text-foreground"
+          ? "border-primary/40 bg-primary/10 text-primary"
+          : "text-muted-foreground hover:border-primary/40 hover:bg-primary/10 hover:text-foreground"
       }`}
     >
       <Heart className={`h-4 w-4 ${liked ? "fill-current" : ""}`} />
       <span>{count}</span>
-    </button>
+    </Button>
   );
 }

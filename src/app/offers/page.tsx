@@ -76,7 +76,7 @@ export default async function OffersPage({ searchParams }: OffersPageProps) {
 
   return (
     <section className="space-y-4">
-      <header className="space-y-1">
+      <header className="space-y-2">
         <h1 className="text-2xl font-semibold">Mes offres</h1>
         <p className="text-muted-foreground text-sm">
           Gere les offres recues (vendeur) et envoyees (acheteur).

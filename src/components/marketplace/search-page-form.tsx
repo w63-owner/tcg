@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { formatConditionLabel } from "@/lib/listings/condition-label";
 
@@ -120,18 +121,21 @@ export function MarketplaceSearchPageForm({
   }, [currentSearch]);
 
   const normalizedQuery = queryValue.trim().toLowerCase();
-  const matchesQuery = (title: string, criteria: string[]) => {
-    if (!normalizedQuery) return true;
-    const haystack = `${title} ${criteria.join(" ")}`.toLowerCase();
-    return haystack.includes(normalizedQuery);
-  };
+  const matchesQuery = useCallback(
+    (title: string, criteria: string[]) => {
+      if (!normalizedQuery) return true;
+      const haystack = `${title} ${criteria.join(" ")}`.toLowerCase();
+      return haystack.includes(normalizedQuery);
+    },
+    [normalizedQuery],
+  );
 
   const filteredSavedSearches = useMemo(
     () =>
       savedSearches
         .filter((savedSearch) => matchesQuery(savedSearch.title, savedSearch.criteria))
         .slice(0, 2),
-    [normalizedQuery, savedSearches],
+    [matchesQuery, savedSearches],
   );
 
   const filteredRecentSearches = useMemo(
@@ -139,7 +143,7 @@ export function MarketplaceSearchPageForm({
       recentSearches.filter((search) =>
         matchesQuery(search.title, search.criteria),
       ),
-    [normalizedQuery, recentSearches],
+    [matchesQuery, recentSearches],
   );
 
   const suggestions = useMemo(() => {
@@ -205,9 +209,11 @@ export function MarketplaceSearchPageForm({
                         <Link
                           key={`${savedSearch.id}-${criterion}`}
                           href={savedSearch.href}
-                          className="bg-muted text-muted-foreground shrink-0 rounded-full border px-2 py-0.5 text-[10px]"
+                          className="shrink-0"
                         >
-                          {criterion}
+                          <Badge variant="outline" className="text-[10px]">
+                            {criterion}
+                          </Badge>
                         </Link>
                       ))}
                     </div>
@@ -237,9 +243,11 @@ export function MarketplaceSearchPageForm({
                         <Link
                           key={`${search.href}-${criterion}`}
                           href={search.href}
-                          className="bg-muted text-muted-foreground shrink-0 rounded-full border px-2 py-0.5 text-[10px]"
+                          className="shrink-0"
                         >
-                          {criterion}
+                          <Badge variant="outline" className="text-[10px]">
+                            {criterion}
+                          </Badge>
                         </Link>
                       ))}
                     </div>

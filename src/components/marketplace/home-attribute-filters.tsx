@@ -1,6 +1,13 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type HomeAttributeFiltersProps = {
   setOptions: string[];
@@ -15,6 +22,8 @@ type Option = {
   value: string;
   label: string;
 };
+
+const ALL_OPTION = "__all__";
 
 function updateParam(
   key: string,
@@ -84,88 +93,120 @@ export function HomeAttributeFilters({
 
   return (
     <div className="hide-scrollbar flex gap-2 overflow-x-auto pb-1">
-      <select
-        value={setFilter}
-        onChange={(event) =>
-          updateParam("set", event.target.value, new URLSearchParams(searchParams), router, pathname)
+      <Select
+        value={setFilter || ALL_OPTION}
+        onValueChange={(value) =>
+          updateParam(
+            "set",
+            value === ALL_OPTION ? "" : value,
+            new URLSearchParams(searchParams),
+            router,
+            pathname,
+          )
         }
-        className="border-input h-9 shrink-0 rounded-md border bg-transparent px-2 text-sm"
       >
-        <option value="">Serie: Toutes</option>
-        {setOptions.map((setId) => (
-          <option key={setId} value={setId}>
-            {`Serie: ${setId}`}
-          </option>
-        ))}
-      </select>
+        <SelectTrigger className="h-9 w-auto min-w-[10rem] shrink-0">
+          <SelectValue placeholder="Serie: Toutes" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={ALL_OPTION}>Serie: Toutes</SelectItem>
+          {setOptions.map((setId) => (
+            <SelectItem key={setId} value={setId}>
+              {`Serie: ${setId}`}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
 
-      <select
-        value={rarity}
-        onChange={(event) =>
-          updateParam("rarity", event.target.value, new URLSearchParams(searchParams), router, pathname)
+      <Select
+        value={rarity || ALL_OPTION}
+        onValueChange={(value) =>
+          updateParam(
+            "rarity",
+            value === ALL_OPTION ? "" : value,
+            new URLSearchParams(searchParams),
+            router,
+            pathname,
+          )
         }
-        className="border-input h-9 shrink-0 rounded-md border bg-transparent px-2 text-sm"
       >
-        {rarityOptions.map((option) => (
-          <option key={option.value || "all"} value={option.value}>
-            {`Rarete: ${option.label}`}
-          </option>
-        ))}
-      </select>
+        <SelectTrigger className="h-9 w-auto min-w-[10rem] shrink-0">
+          <SelectValue placeholder="Rarete: Toutes raretes" />
+        </SelectTrigger>
+        <SelectContent>
+          {rarityOptions.map((option) => (
+            <SelectItem key={option.value || ALL_OPTION} value={option.value || ALL_OPTION}>
+              {`Rarete: ${option.label}`}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
 
-      <select
-        value={condition}
-        onChange={(event) =>
+      <Select
+        value={condition || ALL_OPTION}
+        onValueChange={(value) =>
           updateParam(
             "condition",
-            event.target.value,
+            value === ALL_OPTION ? "" : value,
             new URLSearchParams(searchParams),
             router,
             pathname,
           )
         }
-        className="border-input h-9 shrink-0 rounded-md border bg-transparent px-2 text-sm"
       >
-        {conditionOptions.map((option) => (
-          <option key={option.value || "all"} value={option.value}>
-            {`Etat: ${option.label}`}
-          </option>
-        ))}
-      </select>
+        <SelectTrigger className="h-9 w-auto min-w-[10rem] shrink-0">
+          <SelectValue placeholder="Etat: Tous les etats" />
+        </SelectTrigger>
+        <SelectContent>
+          {conditionOptions.map((option) => (
+            <SelectItem key={option.value || ALL_OPTION} value={option.value || ALL_OPTION}>
+              {`Etat: ${option.label}`}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
 
-      <select
-        value={isGraded}
-        onChange={(event) =>
+      <Select
+        value={isGraded || ALL_OPTION}
+        onValueChange={(value) =>
           updateParam(
             "is_graded",
-            event.target.value,
+            value === ALL_OPTION ? "" : value,
             new URLSearchParams(searchParams),
             router,
             pathname,
           )
         }
-        className="border-input h-9 shrink-0 rounded-md border bg-transparent px-2 text-sm"
       >
-        {gradedOptions.map((option) => (
-          <option key={option.value || "all"} value={option.value}>
-            {`Gradation: ${option.label}`}
-          </option>
-        ))}
-      </select>
+        <SelectTrigger className="h-9 w-auto min-w-[10rem] shrink-0">
+          <SelectValue placeholder="Gradation: Toutes cartes" />
+        </SelectTrigger>
+        <SelectContent>
+          {gradedOptions.map((option) => (
+            <SelectItem key={option.value || ALL_OPTION} value={option.value || ALL_OPTION}>
+              {`Gradation: ${option.label}`}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
 
-      <select
+      <Select
         value={sort || "date_desc"}
-        onChange={(event) =>
-          updateParam("sort", event.target.value, new URLSearchParams(searchParams), router, pathname)
+        onValueChange={(value) =>
+          updateParam("sort", value, new URLSearchParams(searchParams), router, pathname)
         }
-        className="border-input h-9 shrink-0 rounded-md border bg-transparent px-2 text-sm"
       >
-        {sortOptions.map((option) => (
-          <option key={option.value} value={option.value}>
-            {`Tri: ${option.label}`}
-          </option>
-        ))}
-      </select>
+        <SelectTrigger className="h-9 w-auto min-w-[10rem] shrink-0">
+          <SelectValue placeholder="Tri: Plus recent" />
+        </SelectTrigger>
+        <SelectContent>
+          {sortOptions.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {`Tri: ${option.label}`}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   );
 }

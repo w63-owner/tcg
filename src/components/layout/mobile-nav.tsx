@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ComponentType } from "react";
-import { Heart, MessageCircle, PlusSquare, Search, User } from "lucide-react";
+import { CirclePlus, Heart, House, MessageCircle, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
@@ -13,9 +13,9 @@ type NavItem = {
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { href: "/", label: "Recherche", icon: Search },
+  { href: "/", label: "Recherche", icon: House },
   { href: "/favorites", label: "Favoris", icon: Heart },
-  { href: "/sell", label: "Vendre", icon: PlusSquare },
+  { href: "/sell", label: "Vendre", icon: CirclePlus },
   { href: "/messages", label: "Messages", icon: MessageCircle },
   { href: "/profile", label: "Compte", icon: User },
 ];
@@ -51,10 +51,11 @@ export function MobileNav() {
               <li key={item.href}>
                 <Link
                   href={item.href}
+                  aria-label={item.label}
                   className={cn(
-                    "flex flex-col items-center justify-center gap-0.5 rounded-xl px-2 py-2 text-[10px] transition-colors",
+                    "flex items-center justify-center rounded-xl px-2 py-2 transition-colors",
                     isSellItem &&
-                      "bg-primary/10 font-semibold text-primary shadow-[0_2px_8px_rgba(0,0,0,0.08)]",
+                      "bg-primary/10 font-semibold text-primary shadow-sm",
                     active
                       ? "bg-primary/10 text-primary"
                       : "text-muted-foreground hover:text-foreground",
@@ -62,7 +63,6 @@ export function MobileNav() {
                   )}
                 >
                   <Icon className="h-5 w-5" />
-                  <span>{item.label}</span>
                 </Link>
               </li>
             );

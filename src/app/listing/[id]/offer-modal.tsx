@@ -64,7 +64,7 @@ export function OfferModal({
         {state.status !== "idle" ? (
           <p
             className={`text-sm ${
-              state.status === "success" ? "text-green-600" : "text-destructive"
+              state.status === "success" ? "text-primary" : "text-destructive"
             }`}
           >
             {state.message}

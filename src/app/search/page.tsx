@@ -122,7 +122,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   return (
     <section className="space-y-4">
       <SearchPageToast />
-      <header className="space-y-1">
+      <header className="space-y-2">
         <div className="flex items-center gap-2">
           <Button asChild variant="ghost" size="icon" className="h-9 w-9 -ml-2">
             <Link href="/" aria-label="Retour au marketplace">

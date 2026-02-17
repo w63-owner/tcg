@@ -3,6 +3,7 @@
 import { Heart, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import { FavoriteListingToggle } from "@/components/marketplace/favorite-listing-toggle";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 type ListingMediaActionsProps = {
@@ -58,10 +59,10 @@ export function ListingMediaActions({
           initialCount={favoriteCount}
         />
       ) : (
-        <span className="text-muted-foreground inline-flex h-8 min-w-12 items-center justify-center gap-1 rounded-full border px-2 text-xs">
+        <Badge variant="outline" className="text-muted-foreground h-8 min-w-12 justify-center gap-1 rounded-full px-2">
           <Heart className="h-4 w-4" />
           <span>{favoriteCount}</span>
-        </span>
+        </Badge>
       )}
     </div>
   );

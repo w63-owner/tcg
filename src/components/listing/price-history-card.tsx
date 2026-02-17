@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
 
 type PriceObservation = {
   date: string;
@@ -40,7 +41,6 @@ function formatRangeLabel(days: number) {
 
 export function PriceHistoryCard({ observations }: PriceHistoryCardProps) {
   const [periodKey, setPeriodKey] = useState<(typeof PERIODS)[number]["key"]>("all");
-  const nowMs = Date.now();
 
   const sorted = useMemo(
     () =>
@@ -51,15 +51,16 @@ export function PriceHistoryCard({ observations }: PriceHistoryCardProps) {
   );
 
   const selectedPeriod = PERIODS.find((period) => period.key === periodKey) ?? PERIODS[5];
+  const referenceMs =
+    sorted.length > 0 ? new Date(sorted[sorted.length - 1].date).getTime() : 0;
   const filtered = useMemo(() => {
     if (selectedPeriod.days == null) return sorted;
-    const cutoff = nowMs - selectedPeriod.days * 24 * 60 * 60 * 1000;
+    const cutoff = referenceMs - selectedPeriod.days * 24 * 60 * 60 * 1000;
     return sorted.filter((point) => new Date(point.date).getTime() >= cutoff);
-  }, [nowMs, selectedPeriod.days, sorted]);
+  }, [referenceMs, selectedPeriod.days, sorted]);
 
   const chartPoints = filtered.length > 0 ? filtered : sorted;
   const prices = chartPoints.map((point) => point.price);
-  const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
   const maxPrice = prices.length > 0 ? Math.max(...prices) : 100;
   const yMin = 0;
   const yMax = Math.max(maxPrice * 1.1, 10);
@@ -83,10 +84,10 @@ export function PriceHistoryCard({ observations }: PriceHistoryCardProps) {
   const xTicks = xTickIndexes.map((index) => chartPoints[index]).filter(Boolean);
 
   const observations12m = sorted.filter(
-    (point) => new Date(point.date).getTime() >= nowMs - 365 * 24 * 60 * 60 * 1000,
+    (point) => new Date(point.date).getTime() >= referenceMs - 365 * 24 * 60 * 60 * 1000,
   );
   const observations3m = sorted.filter(
-    (point) => new Date(point.date).getTime() >= nowMs - 90 * 24 * 60 * 60 * 1000,
+    (point) => new Date(point.date).getTime() >= referenceMs - 90 * 24 * 60 * 60 * 1000,
   );
 
   const range12mMin = observations12m.length > 0 ? Math.min(...observations12m.map((p) => p.price)) : null;
@@ -110,18 +111,16 @@ export function PriceHistoryCard({ observations }: PriceHistoryCardProps) {
 
       <div className="bg-muted flex overflow-x-auto rounded-full p-1">
         {PERIODS.map((period) => (
-          <button
+          <Button
             key={period.key}
             type="button"
             onClick={() => setPeriodKey(period.key)}
-            className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-              periodKey === period.key
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
+            variant={periodKey === period.key ? "secondary" : "ghost"}
+            size="xs"
+            className="shrink-0 rounded-full px-3"
           >
             {period.label}
-          </button>
+          </Button>
         ))}
       </div>
 
@@ -158,14 +157,14 @@ export function PriceHistoryCard({ observations }: PriceHistoryCardProps) {
                   fill="url(#priceHistoryFill)"
                   stroke="none"
                   points={`${coordinates.join(" ")} 100,100 0,100`}
-                  className="text-emerald-300"
+                  className="text-primary"
                 />
                 <polyline
                   fill="none"
                   stroke="currentColor"
                   strokeWidth="1.8"
                   points={coordinates.join(" ")}
-                  className="text-emerald-300"
+                  className="text-primary"
                 />
               </svg>
             ) : (

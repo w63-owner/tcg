@@ -420,20 +420,37 @@ export function SellForm() {
   };
 
   const confirmNoCatalogMatch = () => {
+    const fallbackCandidate = ocrCandidates[0] ?? null;
+    const name = ocrParsed?.name || fallbackCandidate?.name || "";
+    const setValue = ocrParsed?.set || fallbackCandidate?.set || "";
+    const numberValue = ocrParsed?.cardNumber || fallbackCandidate?.cardNumber || "";
+    const languageValue =
+      ocrParsed?.language || fallbackCandidate?.language || "";
+    const hpValue =
+      ocrParsed?.hp !== undefined
+        ? String(ocrParsed.hp)
+        : fallbackCandidate?.hp !== undefined && fallbackCandidate?.hp !== null
+          ? String(fallbackCandidate.hp)
+          : "";
+    const rarityValue = ocrParsed?.rarity || fallbackCandidate?.rarity || "";
+    const finishValue = ocrParsed?.finish || fallbackCandidate?.finish || "";
+
     setMatchDecision("unmatched");
     setOcrSelectedCardRefId("");
-    setTitleValue("");
-    setCardNameValue(ocrParsed?.name || "");
-    setCardSetValue(ocrParsed?.set || "");
-    setCardNumberValue(ocrParsed?.cardNumber || "");
+    setTitleValue(name);
+    setCardNameValue(name);
+    setCardSetValue(setValue);
+    setCardNumberValue(numberValue);
     setCardLanguageValue(
-      ocrParsed?.language && ["fr", "en", "jp"].includes(ocrParsed.language.toLowerCase())
-        ? (ocrParsed.language.toLowerCase() as "fr" | "en" | "jp")
+      languageValue && ["fr", "en", "jp"].includes(languageValue.toLowerCase())
+        ? (languageValue.toLowerCase() as "fr" | "en" | "jp")
         : "",
     );
-    setCardHpValue(ocrParsed?.hp ? String(ocrParsed.hp) : "");
-    setCardRarityValue(ocrParsed?.rarity || "");
-    setCardFinishValue(ocrParsed?.finish || "");
+    setCardHpValue(hpValue);
+    setCardRarityValue(rarityValue);
+    setCardFinishValue(finishValue);
+    setHasSubmittedCurrentFlow(false);
+    setStep((current) => Math.min(4, current + 1));
   };
 
   const canGoNext =
@@ -496,7 +513,7 @@ export function SellForm() {
         <form
           id="sell-form"
           action={formAction}
-          className={`space-y-5 ${step === 1 ? "" : "pb-24 md:pb-0"}`}
+          className={`space-y-4 ${step === 1 ? "" : "pb-24 md:pb-0"}`}
           onSubmit={(event) => {
             if (step < 4) {
               event.preventDefault();
@@ -889,7 +906,7 @@ export function SellForm() {
                           setHasSubmittedCurrentFlow(false);
                           setStep((current) => Math.min(4, current + 1));
                         }}
-                        className="h-11 w-full text-base md:w-auto md:text-sm"
+                        className="w-full text-base md:w-auto md:text-sm"
                       >
                         Etape suivante
                       </Button>
@@ -902,7 +919,7 @@ export function SellForm() {
                         setHasSubmittedCurrentFlow(false);
                         setStep((current) => Math.min(4, current + 1));
                       }}
-                      className="h-11 w-full text-base md:w-auto md:text-sm"
+                      className="w-full text-base md:w-auto md:text-sm"
                     >
                       Etape suivante
                     </Button>
@@ -956,7 +973,7 @@ export function SellForm() {
           <div
             className={`mt-4 rounded-md border p-3 text-sm ${
               state.status === "success"
-                ? "border-green-500/40 bg-green-500/10"
+                ? "border-primary/40 bg-primary/10"
                 : "border-destructive/40 bg-destructive/10"
             }`}
           >
@@ -1041,7 +1058,7 @@ export function SellForm() {
 
               <div className="absolute inset-x-0 bottom-0 space-y-2 bg-gradient-to-t from-black/85 via-black/55 to-transparent px-4 pb-[max(1rem,var(--safe-area-bottom))] pt-10">
                 {cameraError ? (
-                  <p className="text-xs text-red-300">{cameraError}</p>
+                  <p className="text-destructive text-xs">{cameraError}</p>
                 ) : null}
                 {capturedPreviewUrl ? (
                   <div className="flex items-center justify-center gap-2">

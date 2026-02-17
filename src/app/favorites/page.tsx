@@ -232,7 +232,7 @@ export default async function FavoritesPage() {
 
   return (
     <section className="space-y-4">
-      <header className="space-y-1">
+      <header className="space-y-2">
         <h1 className="text-2xl font-semibold">Favoris</h1>
         <p className="text-muted-foreground text-sm">
           Retrouve tes annonces, recherches et vendeurs favoris.

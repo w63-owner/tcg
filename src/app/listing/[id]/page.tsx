@@ -252,7 +252,7 @@ export default async function ListingPage({
               canToggleFavorite={Boolean(user)}
             />
           </div>
-          <div className="overflow-hidden">
+          <div className="mx-auto w-1/2 overflow-hidden">
             <ListingImageCarousel
               images={[
                 listing.cover_image_url
@@ -266,21 +266,23 @@ export default async function ListingPage({
           </div>
         </div>
 
-        <aside className="h-fit space-y-5 lg:sticky lg:top-20">
+        <aside className="h-fit space-y-4 lg:sticky lg:top-20">
           <section className="space-y-3 border-b pb-4">
-            <h1 className="text-3xl font-bold tracking-tight">{listing.title}</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">{listing.title}</h1>
             <div>
-              <p className="text-2xl font-bold tracking-tight">{toEuro(displayPrice)}</p>
+              <p className="text-2xl font-semibold tracking-tight">{toEuro(displayPrice)}</p>
               <div className="text-muted-foreground mt-1 space-y-1 text-xs">
                 <p>Hors frais de port. Livraison calculee au checkout.</p>
               </div>
             </div>
-            <p className="text-sm">
-              <span className="font-medium">Etat:</span>{" "}
-              {listing.is_graded
-                ? `Gradee (${listing.grading_company || "N/A"}${listing.grade_note ? ` ${listing.grade_note}` : ""})`
-                : formatConditionUserLabel(listing.condition)}
-            </p>
+            <div>
+              <p className="text-muted-foreground text-xs">Etat</p>
+              <p className="text-sm">
+                {listing.is_graded
+                  ? `Gradee (${listing.grading_company || "N/A"}${listing.grade_note ? ` ${listing.grade_note}` : ""})`
+                  : formatConditionUserLabel(listing.condition)}
+              </p>
+            </div>
             <form action={startCheckoutAction} className="hidden space-y-2 md:block">
               <input type="hidden" name="listing_id" value={listing.id} />
               <Button type="submit" className="w-full" disabled={!canBuy}>
@@ -302,28 +304,33 @@ export default async function ListingPage({
             <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
               Etat de la carte
             </p>
-            <div className="grid grid-cols-1 gap-1 text-sm sm:grid-cols-2">
+            <div className="grid grid-cols-2 gap-x-3 gap-y-2">
               {listing.is_graded ? (
                 <>
-                  <p>
-                    <span className="font-medium">Mode:</span> Gradee
-                  </p>
-                  <p>
-                    <span className="font-medium">Societe:</span> {listing.grading_company || "-"}
-                  </p>
-                  <p>
-                    <span className="font-medium">Note:</span> {listing.grade_note ?? "-"}
-                  </p>
-                  <p>
-                    <span className="font-medium">Etat estime:</span>{" "}
-                    {cardRef ? formatConditionUserLabel(cardRef.estimated_condition) : "-"}
-                  </p>
+                  <div>
+                    <p className="text-muted-foreground text-xs">Mode</p>
+                    <p className="text-sm">Gradee</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs">Societe</p>
+                    <p className="text-sm">{listing.grading_company || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs">Note</p>
+                    <p className="text-sm">{listing.grade_note ?? "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs">Etat estime</p>
+                    <p className="text-sm">
+                      {cardRef ? formatConditionUserLabel(cardRef.estimated_condition) : "-"}
+                    </p>
+                  </div>
                 </>
               ) : (
-                <p>
-                  <span className="font-medium">Etat:</span>{" "}
-                  {formatConditionUserLabel(listing.condition)}
-                </p>
+                <div>
+                  <p className="text-muted-foreground text-xs">Etat</p>
+                  <p className="text-sm">{formatConditionUserLabel(listing.condition)}</p>
+                </div>
               )}
             </div>
           </section>
@@ -334,26 +341,31 @@ export default async function ListingPage({
                 <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
                   Identification
                 </p>
-                <div className="grid grid-cols-1 gap-x-3 gap-y-1 text-sm sm:grid-cols-2">
-                  <p>
-                    <span className="font-medium">Set:</span> {formatSetLabel(cardRef.set_id)}
-                  </p>
-                  <p>
-                    <span className="font-medium">Numero:</span> {cardRef.card_number || "-"}
-                  </p>
-                  <p>
-                    <span className="font-medium">Langue:</span>{" "}
-                    {cardRef.language ? cardRef.language.toUpperCase() : "-"}
-                  </p>
-                  <p>
-                    <span className="font-medium">HP:</span> {cardRef.hp ?? "-"}
-                  </p>
-                  <p>
-                    <span className="font-medium">Rarete:</span> {formatRarityLabel(cardRef.rarity)}
-                  </p>
-                  <p>
-                    <span className="font-medium">Finition:</span> {formatFinishLabel(cardRef.finish)}
-                  </p>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+                  <div>
+                    <p className="text-muted-foreground text-xs">Set</p>
+                    <p className="text-sm">{formatSetLabel(cardRef.set_id)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs">Numero</p>
+                    <p className="text-sm">{cardRef.card_number || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs">Langue</p>
+                    <p className="text-sm">{cardRef.language ? cardRef.language.toUpperCase() : "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs">HP</p>
+                    <p className="text-sm">{cardRef.hp ?? "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs">Rarete</p>
+                    <p className="text-sm">{formatRarityLabel(cardRef.rarity)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs">Finition</p>
+                    <p className="text-sm">{formatFinishLabel(cardRef.finish)}</p>
+                  </div>
                 </div>
               </section>
 
@@ -361,30 +373,35 @@ export default async function ListingPage({
                 <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
                   Details techniques
                 </p>
-                <div className="grid grid-cols-1 gap-x-3 gap-y-1 text-sm sm:grid-cols-2">
-                  <p>
-                    <span className="font-medium">Secret:</span>{" "}
-                    {cardRef.is_secret === null ? "-" : cardRef.is_secret ? "Oui" : "Non"}
-                  </p>
-                  <p>
-                    <span className="font-medium">Promo:</span>{" "}
-                    {cardRef.is_promo === null ? "-" : cardRef.is_promo ? "Oui" : "Non"}
-                  </p>
-                  <p>
-                    <span className="font-medium">Vintage:</span> {cardRef.vintage_hint || "-"}
-                  </p>
-                  <p>
-                    <span className="font-medium">Regulation:</span> {cardRef.regulation_mark || "-"}
-                  </p>
-                  <p>
-                    <span className="font-medium">Illustrateur:</span> {cardRef.illustrator || "-"}
-                  </p>
-                  <p>
-                    <span className="font-medium">Annee:</span> {cardRef.release_year ?? "-"}
-                  </p>
-                  <p className="sm:col-span-2">
-                    <span className="font-medium">Ref. collection:</span> {cardRef.tcg_id || cardRef.id}
-                  </p>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+                  <div>
+                    <p className="text-muted-foreground text-xs">Secret</p>
+                    <p className="text-sm">{cardRef.is_secret === null ? "-" : cardRef.is_secret ? "Oui" : "Non"}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs">Promo</p>
+                    <p className="text-sm">{cardRef.is_promo === null ? "-" : cardRef.is_promo ? "Oui" : "Non"}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs">Vintage</p>
+                    <p className="text-sm">{cardRef.vintage_hint || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs">Regulation</p>
+                    <p className="text-sm">{cardRef.regulation_mark || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs">Illustrateur</p>
+                    <p className="text-sm">{cardRef.illustrator || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs">Annee</p>
+                    <p className="text-sm">{cardRef.release_year ?? "-"}</p>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="text-muted-foreground text-xs">Ref. collection</p>
+                    <p className="text-sm">{cardRef.tcg_id || cardRef.id}</p>
+                  </div>
                 </div>
               </section>
             </>
@@ -421,23 +438,23 @@ export default async function ListingPage({
               <>
                 <form action={createConversationForListingAction}>
                   <input type="hidden" name="listing_id" value={listing.id} />
-                  <Button type="submit" variant="secondary" className="h-11 w-full shadow-lg">
+                  <Button type="submit" variant="secondary" className="h-12 w-full">
                     Contacter
                   </Button>
                 </form>
                 <form action={startCheckoutAction}>
                   <input type="hidden" name="listing_id" value={listing.id} />
-                  <Button type="submit" className="h-11 w-full shadow-lg" disabled={!canBuy}>
+                  <Button type="submit" className="h-12 w-full" disabled={!canBuy}>
                     Acheter
                   </Button>
                 </form>
               </>
             ) : (
               <>
-                <Button asChild variant="secondary" className="h-11 w-full shadow-lg">
+                <Button asChild variant="secondary" className="h-12 w-full">
                   <Link href={`/auth?next=/listing/${listing.id}`}>Se connecter</Link>
                 </Button>
-                <Button asChild className="h-11 w-full shadow-lg">
+                <Button asChild className="h-12 w-full">
                   <Link href={`/auth?next=/listing/${listing.id}`}>Acheter</Link>
                 </Button>
               </>
