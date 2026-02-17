@@ -9,6 +9,7 @@ export async function GET(request: Request) {
   const filters = parseFeedFilters({
     q: url.searchParams.get("q") ?? undefined,
     set: url.searchParams.get("set") ?? undefined,
+    rarity: url.searchParams.get("rarity") ?? undefined,
     condition: url.searchParams.get("condition") ?? undefined,
     is_graded: url.searchParams.get("is_graded") ?? undefined,
     grade_min: url.searchParams.get("grade_min") ?? undefined,

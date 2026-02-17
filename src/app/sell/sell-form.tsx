@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
@@ -17,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
+import { ListingImageCarousel } from "@/components/listing/listing-image-carousel";
 import { createListingAction } from "./actions";
 import { initialSellFormState } from "./sell-form-state";
 import { formatConditionLabel } from "@/lib/listings/condition-label";
@@ -99,9 +100,6 @@ type OcrParsed = {
   estimatedCondition?: (typeof CONDITIONS)[number];
 };
 
-const OCR_HIGH_CONFIDENCE_THRESHOLD = 0.75;
-const OCR_MEDIUM_CONFIDENCE_THRESHOLD = 0.5;
-
 function mapGradeToCondition(grade: number) {
   if (grade >= 10) return "MINT";
   if (grade >= 9) return "NEAR_MINT";
@@ -122,6 +120,13 @@ export function SellForm() {
   const [conditionValue, setConditionValue] = useState("NEAR_MINT");
   const [gradingCompanyValue, setGradingCompanyValue] = useState("PSA");
   const [deliveryWeightClassValue, setDeliveryWeightClassValue] = useState("S");
+  const [cardNameValue, setCardNameValue] = useState("");
+  const [cardSetValue, setCardSetValue] = useState("");
+  const [cardNumberValue, setCardNumberValue] = useState("");
+  const [cardLanguageValue, setCardLanguageValue] = useState<"" | "fr" | "en" | "jp">("");
+  const [cardHpValue, setCardHpValue] = useState("");
+  const [cardRarityValue, setCardRarityValue] = useState("");
+  const [cardFinishValue, setCardFinishValue] = useState("");
   const [hasSubmittedCurrentFlow, setHasSubmittedCurrentFlow] = useState(false);
   const [frontSelected, setFrontSelected] = useState(false);
   const [backSelected, setBackSelected] = useState(false);
@@ -133,11 +138,12 @@ export function SellForm() {
   const [backPreviewUrl, setBackPreviewUrl] = useState<string | null>(null);
   const [ocrAttemptId, setOcrAttemptId] = useState("");
   const [ocrSelectedCardRefId, setOcrSelectedCardRefId] = useState("");
+  const [matchDecision, setMatchDecision] = useState<"pending" | "matched" | "unmatched">(
+    "pending",
+  );
   const [ocrCandidates, setOcrCandidates] = useState<OcrCandidate[]>([]);
   const [ocrParsed, setOcrParsed] = useState<OcrParsed | null>(null);
-  const [ocrConfidence, setOcrConfidence] = useState(0);
   const [ocrError, setOcrError] = useState("");
-  const [ocrHint, setOcrHint] = useState("");
   const [isOcrLoading, setIsOcrLoading] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -159,13 +165,22 @@ export function SellForm() {
     () => ocrCandidates.find((candidate) => candidate.cardRefId === ocrSelectedCardRefId) ?? null,
     [ocrCandidates, ocrSelectedCardRefId],
   );
+  const capturedPreviewImages = useMemo(
+    () =>
+      [
+        frontPreviewUrl ? { src: frontPreviewUrl, alt: "Photo capturee recto" } : null,
+        backPreviewUrl ? { src: backPreviewUrl, alt: "Photo capturee verso" } : null,
+      ].filter((image): image is { src: string; alt: string } => Boolean(image)),
+    [frontPreviewUrl, backPreviewUrl],
+  );
+  const hasResolvedMatchDecision = matchDecision !== "pending";
 
-  const checkpoints = [
-    { label: "Photos", done: frontSelected && backSelected },
-    { label: "Details", done: titleValue.trim().length >= 3 },
-    { label: "Prix", done: Number.isFinite(previewPrice) && previewPrice > 0 },
-    { label: "Pret", done: frontSelected && backSelected && titleValue.trim().length >= 3 && previewPrice > 0 },
-  ];
+  const steps = [
+    { number: 1, label: "Photos" },
+    { number: 2, label: "Correspondance" },
+    { number: 3, label: "Annonce" },
+    { number: 4, label: "Recap" },
+  ] as const;
 
   useEffect(() => {
     if (step !== 1) return;
@@ -246,8 +261,8 @@ export function SellForm() {
   const runOcrDetection = async (file: File) => {
     if (isOcrLoading) return;
     setIsOcrLoading(true);
+    setMatchDecision("pending");
     setOcrError("");
-    setOcrHint("");
 
     const syncOcrSelection = async (attemptId: string, selectedCardRefId: string) => {
       if (!attemptId || !selectedCardRefId) return;
@@ -285,11 +300,9 @@ export function SellForm() {
 
       const candidates = Array.isArray(json.candidates) ? json.candidates : [];
       const top = candidates[0];
-      const confidence = Number(json.confidence ?? 0);
       const attemptId = json.attemptId ?? "";
       setOcrCandidates(candidates);
       setOcrParsed(json.parsed ?? null);
-      setOcrConfidence(confidence);
       setOcrAttemptId(attemptId);
 
       if (top) {
@@ -297,24 +310,6 @@ export function SellForm() {
         void syncOcrSelection(attemptId, top.cardRefId);
       }
 
-      if (confidence >= OCR_HIGH_CONFIDENCE_THRESHOLD) {
-        setOcrHint("Confiance elevee: pre-remplissage automatique, corrige si besoin.");
-      } else if (confidence >= OCR_MEDIUM_CONFIDENCE_THRESHOLD) {
-        setOcrHint("Confiance moyenne: verifie les suggestions avant publication.");
-      } else {
-        setOcrHint("Confiance faible: complete manuellement, suggestions fournies.");
-      }
-
-      if (!titleValue.trim() && confidence >= OCR_HIGH_CONFIDENCE_THRESHOLD) {
-        const detectedTitle = json.parsed?.name?.trim() || top?.name?.trim();
-        if (detectedTitle) {
-          setTitleValue(detectedTitle);
-        }
-      }
-
-      if (!isGraded && json.parsed?.estimatedCondition) {
-        setConditionValue(json.parsed.estimatedCondition);
-      }
     } catch {
       setOcrError("OCR indisponible pour le moment.");
     } finally {
@@ -410,13 +405,47 @@ export function SellForm() {
     await capturePhoto();
   };
 
+  const applyCardDetailsFromCandidate = (candidate: OcrCandidate) => {
+    setCardNameValue(candidate.name || "");
+    setCardSetValue(candidate.set || "");
+    setCardNumberValue(candidate.cardNumber || "");
+    setCardLanguageValue(
+      candidate.language && ["fr", "en", "jp"].includes(candidate.language.toLowerCase())
+        ? (candidate.language.toLowerCase() as "fr" | "en" | "jp")
+        : "",
+    );
+    setCardHpValue(candidate.hp ? String(candidate.hp) : "");
+    setCardRarityValue(candidate.rarity || "");
+    setCardFinishValue(candidate.finish || "");
+  };
+
+  const confirmNoCatalogMatch = () => {
+    setMatchDecision("unmatched");
+    setOcrSelectedCardRefId("");
+    setTitleValue("");
+    setCardNameValue(ocrParsed?.name || "");
+    setCardSetValue(ocrParsed?.set || "");
+    setCardNumberValue(ocrParsed?.cardNumber || "");
+    setCardLanguageValue(
+      ocrParsed?.language && ["fr", "en", "jp"].includes(ocrParsed.language.toLowerCase())
+        ? (ocrParsed.language.toLowerCase() as "fr" | "en" | "jp")
+        : "",
+    );
+    setCardHpValue(ocrParsed?.hp ? String(ocrParsed.hp) : "");
+    setCardRarityValue(ocrParsed?.rarity || "");
+    setCardFinishValue(ocrParsed?.finish || "");
+  };
+
   const canGoNext =
     step === 1
       ? frontSelected && backSelected
       : step === 2
-        ? titleValue.trim().length >= 3
+        ? hasResolvedMatchDecision &&
+          (matchDecision === "unmatched" || Boolean(selectedOcrCandidate))
         : step === 3
-          ? Number.isFinite(previewPrice) && previewPrice > 0
+          ? titleValue.trim().length >= 3 &&
+            Number.isFinite(previewPrice) &&
+            previewPrice > 0
           : true;
 
   return (
@@ -437,13 +466,31 @@ export function SellForm() {
           ) : null}
           <h1 className="text-2xl font-semibold">Creation d&apos;annonce</h1>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {checkpoints.map((checkpoint) => (
-            <Badge key={checkpoint.label} variant={checkpoint.done ? "secondary" : "outline"}>
-              {checkpoint.done ? "OK" : "..."} {checkpoint.label}
-            </Badge>
-          ))}
-        </div>
+        <ol className="hide-scrollbar flex items-center gap-2 overflow-x-auto pb-1">
+          {steps.map((item) => {
+            const active = step === item.number;
+            const done = step > item.number;
+            return (
+              <li key={item.number} className="flex items-center gap-2 text-xs">
+                <span
+                  className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${
+                    done
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : active
+                        ? "border-primary text-primary"
+                        : "text-muted-foreground border-border"
+                  }`}
+                >
+                  {item.number}
+                </span>
+                <span className={active ? "font-medium" : "text-muted-foreground"}>
+                  {item.label}
+                </span>
+                {item.number < 4 ? <span className="text-muted-foreground">-</span> : null}
+              </li>
+            );
+          })}
+        </ol>
       </header>
       <div>
         <form
@@ -468,6 +515,13 @@ export function SellForm() {
           <input type="hidden" name="delivery_weight_class" value={deliveryWeightClassValue} />
           <input type="hidden" name="card_ref_id" value={ocrSelectedCardRefId} />
           <input type="hidden" name="ocr_attempt_id" value={ocrAttemptId} />
+          <input type="hidden" name="card_name" value={cardNameValue} />
+          <input type="hidden" name="card_set" value={cardSetValue} />
+          <input type="hidden" name="card_number" value={cardNumberValue} />
+          <input type="hidden" name="card_language" value={cardLanguageValue} />
+          <input type="hidden" name="card_hp" value={cardHpValue} />
+          <input type="hidden" name="card_rarity" value={cardRarityValue} />
+          <input type="hidden" name="card_finish" value={cardFinishValue} />
           <div className="hidden">
             <input
               ref={frontInputRef}
@@ -499,62 +553,57 @@ export function SellForm() {
 
           {step === 2 ? (
             <>
-              <div className="space-y-2">
-                <Label htmlFor="title">Titre de l&apos;annonce</Label>
-                <Input
-                  id="title"
-                  placeholder="Ex: Dracaufeu EX 151 FR"
-                  minLength={3}
-                  maxLength={140}
-                  required
-                  value={titleValue}
-                  onChange={(event) => setTitleValue(event.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2 rounded-md border p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-medium">Detection OCR</p>
-                  {isOcrLoading ? (
-                    <span className="text-muted-foreground text-xs">Analyse...</span>
-                  ) : (
-                    <span className="text-muted-foreground text-xs">
-                      Confiance: {Math.round(ocrConfidence * 100)}%
-                    </span>
-                  )}
-                </div>
+              <div className="min-h-[calc(100dvh-15rem)] space-y-3">
                 {ocrError ? (
                   <p className="text-destructive text-xs">{ocrError}</p>
                 ) : null}
-                {ocrHint ? <p className="text-muted-foreground text-xs">{ocrHint}</p> : null}
-                {ocrParsed ? (
-                  <div className="text-muted-foreground flex flex-wrap gap-x-3 gap-y-1 text-xs">
-                    {ocrParsed.language ? <span>Langue: {ocrParsed.language.toUpperCase()}</span> : null}
-                    {ocrParsed.cardNumber ? <span>Numero: {ocrParsed.cardNumber}</span> : null}
-                    {ocrParsed.set ? <span>Set: {formatSetLabel(ocrParsed.set)}</span> : null}
-                    {ocrParsed.rarity ? <span>Rarete: {ocrParsed.rarity}</span> : null}
-                    {ocrParsed.finish ? <span>Finition: {ocrParsed.finish}</span> : null}
-                    {ocrParsed.estimatedCondition ? (
-                      <span>Etat estime: {formatConditionLabel(ocrParsed.estimatedCondition)}</span>
-                    ) : null}
+                {isOcrLoading ? (
+                  <div className="h-[calc(100dvh-24rem)] min-h-[420px] space-y-2">
+                    <div className="hide-scrollbar flex h-full snap-x gap-3 overflow-x-auto pb-1">
+                      {[0, 1].map((idx) => (
+                        <div
+                          key={idx}
+                          className="bg-background w-[min(85vw,360px)] shrink-0 snap-start overflow-hidden rounded-md border"
+                        >
+                          <div className="relative aspect-[63/88] w-full">
+                            <Skeleton className="h-full w-full" />
+                          </div>
+                          <div className="space-y-2 p-3">
+                            <Skeleton className="h-4 w-2/3" />
+                            <Skeleton className="h-3 w-1/2" />
+                            <div className="grid grid-cols-2 gap-2 pt-2">
+                              <Skeleton className="h-3 w-full" />
+                              <Skeleton className="h-3 w-full" />
+                              <Skeleton className="h-3 w-full" />
+                              <Skeleton className="h-3 w-full" />
+                              <Skeleton className="h-3 w-full" />
+                              <Skeleton className="h-3 w-full" />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                ) : null}
-                {ocrCandidates.length > 0 ? (
-                  <div className="space-y-2">
-                    <div className="flex flex-wrap gap-2">
+                ) : ocrCandidates.length > 0 ? (
+                  <div className="h-[calc(100dvh-24rem)] min-h-[420px] space-y-2">
+                    <div className="hide-scrollbar flex h-full snap-x gap-3 overflow-x-auto pb-1">
                       {ocrCandidates.map((candidate) => (
-                        <Button
+                        <button
                           key={candidate.cardRefId}
                           type="button"
-                          variant={
+                          className={`bg-background w-[min(85vw,360px)] shrink-0 snap-start overflow-hidden rounded-md border text-left transition ${
                             ocrSelectedCardRefId === candidate.cardRefId
-                              ? "default"
-                              : "outline"
-                          }
-                          className="h-auto max-w-full px-2 py-1 text-left"
+                              ? "border-primary ring-primary/30 ring-2"
+                              : "border-border"
+                          }`}
                           onClick={() => {
                             setOcrSelectedCardRefId(candidate.cardRefId);
-                            setTitleValue(candidate.name);
+                            setMatchDecision("matched");
+                            setTitleValue(candidate.name || "");
+                            if (!isGraded && candidate.estimatedCondition) {
+                              setConditionValue(candidate.estimatedCondition);
+                            }
+                            applyCardDetailsFromCandidate(candidate);
                             if (ocrAttemptId) {
                               void fetch("/api/ocr/card/selection", {
                                 method: "POST",
@@ -567,60 +616,153 @@ export function SellForm() {
                             }
                           }}
                         >
-                          <span className="truncate text-xs">
-                            {candidate.name} · {formatSetLabel(candidate.set)} ·{" "}
-                            {Math.round(candidate.score * 100)}%
-                          </span>
-                        </Button>
+                          <div className="bg-muted relative aspect-[63/88] w-full">
+                            <span className="bg-background/90 text-foreground absolute top-2 right-2 z-10 rounded-full px-2 py-0.5 text-[11px] font-medium">
+                              {Math.round(candidate.score * 100)}% correspondance
+                            </span>
+                            {candidate.imageUrl ? (
+                              <Image
+                                src={candidate.imageUrl}
+                                alt={candidate.name}
+                                fill
+                                unoptimized
+                                className="object-cover"
+                              />
+                            ) : null}
+                          </div>
+                          <div className="space-y-1 p-3 text-xs">
+                            <p className="line-clamp-2 text-sm font-semibold">{candidate.name}</p>
+                            <p className="text-muted-foreground truncate">
+                              {formatSetLabel(candidate.set)} · {candidate.cardNumber || "-"}
+                            </p>
+                            <div className="text-muted-foreground mt-2 grid grid-cols-2 gap-1 border-t pt-2">
+                              <span>Langue: {candidate.language ? candidate.language.toUpperCase() : "-"}</span>
+                              <span>HP: {candidate.hp ?? "-"}</span>
+                              <span>Rarete: {candidate.rarity || "-"}</span>
+                              <span>Finition: {candidate.finish || "-"}</span>
+                              <span>
+                                Etat estime:{" "}
+                                {candidate.estimatedCondition
+                                  ? formatConditionLabel(candidate.estimatedCondition)
+                                  : "-"}
+                              </span>
+                              <span>Annee: {candidate.releaseYear ?? "-"}</span>
+                              <span>Secret: {candidate.isSecret === null ? "-" : candidate.isSecret ? "Oui" : "Non"}</span>
+                              <span>Promo: {candidate.isPromo === null ? "-" : candidate.isPromo ? "Oui" : "Non"}</span>
+                              <span>Vintage: {candidate.vintageHint || "-"}</span>
+                              <span>Regulation: {candidate.regulationMark || "-"}</span>
+                              <span className="col-span-2">Illustrateur: {candidate.illustrator || "-"}</span>
+                              <span className="col-span-2">Ref: {candidate.tcgId || candidate.cardRefId}</span>
+                            </div>
+                          </div>
+                        </button>
                       ))}
                     </div>
-
-                    {selectedOcrCandidate ? (
-                      <div className="bg-muted/30 space-y-2 rounded-md border p-2 text-xs">
-                        <p className="font-medium">Details de la proposition selectionnee</p>
-                        <div className="text-muted-foreground grid grid-cols-2 gap-1">
-                          <span>Nom: {selectedOcrCandidate.name}</span>
-                          <span>Set: {formatSetLabel(selectedOcrCandidate.set)}</span>
-                          <span>
-                            Confiance: {Math.round(selectedOcrCandidate.score * 100)}%
-                          </span>
-                          <span>Numero: {selectedOcrCandidate.cardNumber || "-"}</span>
-                          <span>
-                            Langue:{" "}
-                            {selectedOcrCandidate.language
-                              ? selectedOcrCandidate.language.toUpperCase()
-                              : "-"}
-                          </span>
-                          <span>HP: {selectedOcrCandidate.hp ?? "-"}</span>
-                          <span>Rarete: {selectedOcrCandidate.rarity || "-"}</span>
-                          <span>Finition: {selectedOcrCandidate.finish || "-"}</span>
-                          <span>Secret: {selectedOcrCandidate.isSecret ? "Oui" : "Non"}</span>
-                          <span>Promo: {selectedOcrCandidate.isPromo ? "Oui" : "Non"}</span>
-                          <span>Vintage: {selectedOcrCandidate.vintageHint || "-"}</span>
-                          <span>Regulation: {selectedOcrCandidate.regulationMark || "-"}</span>
-                          <span>Illustrateur: {selectedOcrCandidate.illustrator || "-"}</span>
-                          <span>
-                            Etat estime:{" "}
-                            {selectedOcrCandidate.estimatedCondition
-                              ? formatConditionLabel(selectedOcrCandidate.estimatedCondition)
-                              : "-"}
-                          </span>
-                          <span>Annee: {selectedOcrCandidate.releaseYear ?? "-"}</span>
-                          <span className="col-span-2">
-                            Ref: {selectedOcrCandidate.tcgId || selectedOcrCandidate.cardRefId}
-                          </span>
-                        </div>
-                      </div>
-                    ) : null}
                   </div>
                 ) : (
                   <p className="text-muted-foreground text-xs">
-                    Aucune suggestion fiable. Tu peux saisir manuellement.
+                    Aucune proposition fiable du catalogue.
                   </p>
                 )}
+
+              </div>
+            </>
+          ) : null}
+
+          {step === 3 ? (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <div className="space-y-2">
+                  <Label htmlFor="title">Titre de l&apos;annonce</Label>
+                  <Input
+                    id="title"
+                    placeholder="Ex: Dracaufeu EX 151 FR"
+                    minLength={3}
+                    maxLength={140}
+                    required
+                    value={titleValue}
+                    onChange={(event) => setTitleValue(event.target.value)}
+                  />
+                </div>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="card_name">Nom de la carte</Label>
+                    <Input
+                      id="card_name"
+                      placeholder="Ex: Dracaufeu"
+                      value={cardNameValue}
+                      onChange={(event) => setCardNameValue(event.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="card_set">Set / Extension</Label>
+                    <Input
+                      id="card_set"
+                      placeholder="Ex: Set de Base"
+                      value={cardSetValue}
+                      onChange={(event) => setCardSetValue(event.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="card_number">Numero</Label>
+                    <Input
+                      id="card_number"
+                      placeholder="Ex: 10/102"
+                      value={cardNumberValue}
+                      onChange={(event) => setCardNumberValue(event.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="card_language">Langue</Label>
+                    <Select
+                      value={cardLanguageValue || undefined}
+                      onValueChange={(value) =>
+                        setCardLanguageValue(value as "" | "fr" | "en" | "jp")
+                      }
+                    >
+                      <SelectTrigger id="card_language" className="w-full">
+                        <SelectValue placeholder="Choisir une langue" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="fr">FR</SelectItem>
+                        <SelectItem value="en">EN</SelectItem>
+                        <SelectItem value="jp">JP</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="card_hp">HP</Label>
+                    <Input
+                      id="card_hp"
+                      type="number"
+                      min="0"
+                      placeholder="Ex: 60"
+                      value={cardHpValue}
+                      onChange={(event) => setCardHpValue(event.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="card_rarity">Rarete</Label>
+                    <Input
+                      id="card_rarity"
+                      placeholder="Ex: RARE / PROMO"
+                      value={cardRarityValue}
+                      onChange={(event) => setCardRarityValue(event.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Label htmlFor="card_finish">Finition</Label>
+                    <Input
+                      id="card_finish"
+                      placeholder="Ex: HOLO / REVERSE_HOLO / FULL_ART"
+                      value={cardFinishValue}
+                      onChange={(event) => setCardFinishValue(event.target.value)}
+                    />
+                  </div>
+                </div>
               </div>
 
-              <div className="space-y-3 rounded-md border p-3">
+              <div className="space-y-3">
                 <div className="flex items-center gap-2 text-sm font-medium">
                   <Checkbox
                     id="is_graded"
@@ -691,44 +833,42 @@ export function SellForm() {
                   </div>
                 )}
               </div>
-            </>
-          ) : null}
 
-          {step === 3 ? (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="price_seller">Prix net vendeur (EUR)</Label>
-                <Input
-                  id="price_seller"
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  placeholder="20.00"
-                  required
-                  value={priceValue}
-                  onChange={(event) => setPriceValue(event.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Prix estime affiche: {previewDisplayPrice.toFixed(2)} EUR (hors livraison).
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="delivery_weight_class">Classe de poids</Label>
-                <Select
-                  value={deliveryWeightClassValue}
-                  onValueChange={setDeliveryWeightClassValue}
-                >
-                  <SelectTrigger id="delivery_weight_class" className="w-full">
-                    <SelectValue placeholder="Choisir une classe" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {WEIGHT_CLASSES.map((weightClass) => (
-                      <SelectItem key={weightClass} value={weightClass}>
-                        {weightClass}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="price_seller">Prix net vendeur (EUR)</Label>
+                  <Input
+                    id="price_seller"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    placeholder="20.00"
+                    required
+                    value={priceValue}
+                    onChange={(event) => setPriceValue(event.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Prix estime affiche: {previewDisplayPrice.toFixed(2)} EUR (hors livraison).
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="delivery_weight_class">Classe de poids</Label>
+                  <Select
+                    value={deliveryWeightClassValue}
+                    onValueChange={setDeliveryWeightClassValue}
+                  >
+                    <SelectTrigger id="delivery_weight_class" className="w-full">
+                      <SelectValue placeholder="Choisir une classe" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {WEIGHT_CLASSES.map((weightClass) => (
+                        <SelectItem key={weightClass} value={weightClass}>
+                          {weightClass}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
           ) : null}
@@ -737,30 +877,73 @@ export function SellForm() {
             {step < 4 ? (
               <>
                 <div className="hidden md:block">
-                  <Button
-                    type="button"
-                    disabled={isPending || !canGoNext}
-                    onClick={() => {
-                      setHasSubmittedCurrentFlow(false);
-                      setStep((current) => Math.min(4, current + 1));
-                    }}
-                    className="h-11 w-full text-base md:w-auto md:text-sm"
-                  >
-                    Etape suivante
-                  </Button>
+                  {step === 2 ? (
+                    <div className="flex w-full flex-wrap gap-2">
+                      <Button type="button" variant="outline" onClick={confirmNoCatalogMatch}>
+                        Aucune correspondance
+                      </Button>
+                      <Button
+                        type="button"
+                        disabled={isPending || !canGoNext}
+                        onClick={() => {
+                          setHasSubmittedCurrentFlow(false);
+                          setStep((current) => Math.min(4, current + 1));
+                        }}
+                        className="h-11 w-full text-base md:w-auto md:text-sm"
+                      >
+                        Etape suivante
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      type="button"
+                      disabled={isPending || !canGoNext}
+                      onClick={() => {
+                        setHasSubmittedCurrentFlow(false);
+                        setStep((current) => Math.min(4, current + 1));
+                      }}
+                      className="h-11 w-full text-base md:w-auto md:text-sm"
+                    >
+                      Etape suivante
+                    </Button>
+                  )}
                 </div>
                 <div className="fixed inset-x-0 bottom-[max(0.75rem,var(--safe-area-bottom))] z-40 px-4 md:hidden">
-                  <Button
-                    type="button"
-                    disabled={isPending || !canGoNext}
-                    onClick={() => {
-                      setHasSubmittedCurrentFlow(false);
-                      setStep((current) => Math.min(4, current + 1));
-                    }}
-                    className="h-12 w-full text-base shadow-lg"
-                  >
-                    Etape suivante
-                  </Button>
+                  {step === 2 ? (
+                    <div className="grid grid-cols-1 gap-2">
+                      <Button
+                        type="button"
+                        disabled={isPending || !canGoNext}
+                        onClick={() => {
+                          setHasSubmittedCurrentFlow(false);
+                          setStep((current) => Math.min(4, current + 1));
+                        }}
+                        className="h-12 text-base shadow-lg"
+                      >
+                        Confirmer
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={confirmNoCatalogMatch}
+                        className="h-12"
+                      >
+                        Aucune correspondance
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      type="button"
+                      disabled={isPending || !canGoNext}
+                      onClick={() => {
+                        setHasSubmittedCurrentFlow(false);
+                        setStep((current) => Math.min(4, current + 1));
+                      }}
+                      className="h-12 w-full text-base shadow-lg"
+                    >
+                      Etape suivante
+                    </Button>
+                  )}
                 </div>
               </>
             ) : (
@@ -909,212 +1092,85 @@ export function SellForm() {
                   <h2 className="text-lg font-semibold">Recapitulatif de l&apos;annonce</h2>
                 </header>
 
-                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
-                <div className="space-y-3 rounded-md border p-4">
-                  <p className="text-sm font-medium">Preview de l&apos;annonce</p>
-                  <div className="bg-muted/20 flex gap-3 rounded-md border p-3">
-                    <div className="bg-muted relative aspect-[3/4] w-28 shrink-0 overflow-hidden rounded-md border">
-                      {frontPreviewUrl ? (
-                        <Image
-                          src={frontPreviewUrl}
-                          alt="Apercu photo recto"
-                          fill
-                          unoptimized
-                          className="object-cover"
-                        />
-                      ) : (
-                        <div className="text-muted-foreground flex h-full items-center justify-center text-[10px]">
-                          Recto manquant
+                <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+                  <section className="space-y-4">
+                    <div className="grid gap-4 lg:grid-cols-3">
+                      <div className="space-y-3 lg:col-span-2">
+                        <div className="overflow-hidden rounded-md">
+                          <ListingImageCarousel images={capturedPreviewImages} />
                         </div>
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1 space-y-2">
-                      <p className="truncate text-sm font-semibold">
-                        {titleValue || "Titre a renseigner"}
-                      </p>
-                      <p className="text-base font-semibold">
-                        {previewDisplayPrice > 0
-                          ? `${previewDisplayPrice.toFixed(2)} EUR`
-                          : "Prix a renseigner"}
-                      </p>
-                      <div className="flex flex-wrap gap-1">
-                        <Badge variant="secondary">{isGraded ? "Gradee" : "Non gradee"}</Badge>
-                        <Badge variant="outline">
-                          {isGraded
-                            ? formatConditionLabel(derivedCondition)
-                            : formatConditionLabel(conditionValue)}
-                        </Badge>
                       </div>
-                      <p className="text-muted-foreground text-xs">
-                        Classe poids: {deliveryWeightClassValue} · OCR:{" "}
-                        {Math.round(ocrConfidence * 100)}%
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <div className="bg-muted relative aspect-[3/4] w-10 overflow-hidden rounded border">
-                          {backPreviewUrl ? (
-                            <Image
-                              src={backPreviewUrl}
-                              alt="Apercu photo verso"
-                              fill
-                              unoptimized
-                              className="object-cover"
-                            />
-                          ) : (
-                            <div className="text-muted-foreground flex h-full items-center justify-center text-[8px]">
-                              Verso
+
+                      <aside className="space-y-4">
+                        <h3 className="text-2xl font-bold tracking-tight">
+                          {titleValue || "Titre a renseigner"}
+                        </h3>
+                        <div>
+                          <p className="text-xl font-bold tracking-tight">
+                            {previewDisplayPrice > 0
+                              ? `${previewDisplayPrice.toFixed(2)} EUR`
+                              : "Prix a renseigner"}
+                          </p>
+                          <p className="text-muted-foreground text-xs">
+                            Hors frais de port. Livraison calculee au checkout.
+                          </p>
+                        </div>
+                        <div className="text-sm">
+                          <p>
+                            <span className="font-medium">Etat:</span>{" "}
+                            {isGraded
+                              ? formatConditionLabel(derivedCondition)
+                              : formatConditionLabel(conditionValue)}
+                          </p>
+                          <p>
+                            <span className="font-medium">Mode:</span>{" "}
+                            {isGraded ? "Carte gradee" : "Carte non gradee"}
+                          </p>
+                        </div>
+                        {cardNameValue ||
+                        cardSetValue ||
+                        cardNumberValue ||
+                        cardLanguageValue ||
+                        cardHpValue ||
+                        cardRarityValue ||
+                        cardFinishValue ||
+                        selectedOcrCandidate ? (
+                          <div className="space-y-2 border-t pt-3 text-sm">
+                            <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+                              Identification carte
+                            </p>
+                            <div className="grid grid-cols-1 gap-1">
+                              <p>
+                                Nom: {cardNameValue || selectedOcrCandidate?.name || "-"}
+                              </p>
+                              <p>
+                                Set:{" "}
+                                {formatSetLabel(cardSetValue || selectedOcrCandidate?.set || null)}
+                              </p>
+                              <p>
+                                Numero: {cardNumberValue || selectedOcrCandidate?.cardNumber || "-"}
+                              </p>
+                              <p>
+                                Langue:{" "}
+                                {(cardLanguageValue || selectedOcrCandidate?.language || "-").toUpperCase()}
+                              </p>
+                              <p>HP: {cardHpValue || selectedOcrCandidate?.hp || "-"}</p>
+                              <p>
+                                Rarete: {cardRarityValue || selectedOcrCandidate?.rarity || "-"} ·
+                                Finition: {cardFinishValue || selectedOcrCandidate?.finish || "-"}
+                              </p>
+                              <p>
+                                Ref:{" "}
+                                {selectedOcrCandidate
+                                  ? selectedOcrCandidate.tcgId || selectedOcrCandidate.cardRefId
+                                  : "Reference manuelle"}
+                              </p>
                             </div>
-                          )}
-                        </div>
-                        <span className="text-muted-foreground text-xs">
-                          {frontSelected && backSelected
-                            ? "Photos recto/verso pretes"
-                            : "Photos incompletes"}
-                        </span>
-                      </div>
+                          </div>
+                        ) : null}
+                      </aside>
                     </div>
-                  </div>
-
-                  <p className="text-sm font-medium">Annonce</p>
-                  <div className="text-muted-foreground grid grid-cols-1 gap-1 text-sm md:grid-cols-2">
-                    <p>
-                      <span className="font-medium text-foreground">Titre:</span>{" "}
-                      {titleValue || "A renseigner"}
-                    </p>
-                    <p>
-                      <span className="font-medium text-foreground">Prix vendeur:</span>{" "}
-                      {previewPrice > 0 ? `${previewPrice.toFixed(2)} EUR` : "A renseigner"}
-                    </p>
-                    <p>
-                      <span className="font-medium text-foreground">Prix affiche estime:</span>{" "}
-                      {previewDisplayPrice > 0 ? `${previewDisplayPrice.toFixed(2)} EUR` : "A renseigner"}
-                    </p>
-                    <p>
-                      <span className="font-medium text-foreground">Mode:</span>{" "}
-                      {isGraded ? "Gradee" : "Non gradee"}
-                    </p>
-                    <p>
-                      <span className="font-medium text-foreground">Recto:</span>{" "}
-                      {frontSelected ? "Ajoute" : "Manquant"}
-                    </p>
-                    <p>
-                      <span className="font-medium text-foreground">Verso:</span>{" "}
-                      {backSelected ? "Ajoute" : "Manquant"}
-                    </p>
-                  </div>
-
-                  <p className="text-sm font-medium">Etat / Gradation</p>
-                  <div className="text-muted-foreground grid grid-cols-1 gap-1 text-sm md:grid-cols-2">
-                    <p>
-                      <span className="font-medium text-foreground">Etat:</span>{" "}
-                      {isGraded
-                        ? formatConditionLabel(derivedCondition)
-                        : formatConditionLabel(conditionValue)}
-                    </p>
-                    <p>
-                      <span className="font-medium text-foreground">Societe:</span>{" "}
-                      {isGraded ? gradingCompanyValue : "-"}
-                    </p>
-                    <p>
-                      <span className="font-medium text-foreground">Note:</span>{" "}
-                      {isGraded ? gradeValue : "-"}
-                    </p>
-                    <p>
-                      <span className="font-medium text-foreground">Classe de poids:</span>{" "}
-                      {deliveryWeightClassValue}
-                    </p>
-                  </div>
-
-                  <p className="text-sm font-medium">OCR / Reference carte</p>
-                  <div className="text-muted-foreground grid grid-cols-1 gap-1 text-sm md:grid-cols-2">
-                    <p>
-                      <span className="font-medium text-foreground">Confiance OCR:</span>{" "}
-                      {Math.round(ocrConfidence * 100)}%
-                    </p>
-                    <p>
-                      <span className="font-medium text-foreground">Tentative OCR:</span>{" "}
-                      {ocrAttemptId || "-"}
-                    </p>
-                    <p>
-                      <span className="font-medium text-foreground">Card ref ID:</span>{" "}
-                      {ocrSelectedCardRefId || "-"}
-                    </p>
-                    <p>
-                      <span className="font-medium text-foreground">Nom OCR:</span>{" "}
-                      {selectedOcrCandidate?.name || ocrParsed?.name || "-"}
-                    </p>
-                    <p>
-                      <span className="font-medium text-foreground">Set:</span>{" "}
-                      {selectedOcrCandidate?.set
-                        ? formatSetLabel(selectedOcrCandidate.set)
-                        : ocrParsed?.set
-                          ? formatSetLabel(ocrParsed.set)
-                          : "-"}
-                    </p>
-                    <p>
-                      <span className="font-medium text-foreground">Numero:</span>{" "}
-                      {selectedOcrCandidate?.cardNumber || ocrParsed?.cardNumber || "-"}
-                    </p>
-                    <p>
-                      <span className="font-medium text-foreground">Langue:</span>{" "}
-                      {selectedOcrCandidate?.language
-                        ? selectedOcrCandidate.language.toUpperCase()
-                        : ocrParsed?.language
-                          ? ocrParsed.language.toUpperCase()
-                          : "-"}
-                    </p>
-                    <p>
-                      <span className="font-medium text-foreground">HP:</span>{" "}
-                      {selectedOcrCandidate?.hp ?? ocrParsed?.hp ?? "-"}
-                    </p>
-                    <p>
-                      <span className="font-medium text-foreground">Rarete:</span>{" "}
-                      {selectedOcrCandidate?.rarity || ocrParsed?.rarity || "-"}
-                    </p>
-                    <p>
-                      <span className="font-medium text-foreground">Finition:</span>{" "}
-                      {selectedOcrCandidate?.finish || ocrParsed?.finish || "-"}
-                    </p>
-                    <p>
-                      <span className="font-medium text-foreground">Etat estime:</span>{" "}
-                      {selectedOcrCandidate?.estimatedCondition
-                        ? formatConditionLabel(selectedOcrCandidate.estimatedCondition)
-                        : ocrParsed?.estimatedCondition
-                          ? formatConditionLabel(ocrParsed.estimatedCondition)
-                          : "-"}
-                    </p>
-                    <p>
-                      <span className="font-medium text-foreground">Secret:</span>{" "}
-                      {selectedOcrCandidate?.isSecret ? "Oui" : "Non"}
-                    </p>
-                    <p>
-                      <span className="font-medium text-foreground">Promo:</span>{" "}
-                      {selectedOcrCandidate?.isPromo ? "Oui" : "Non"}
-                    </p>
-                    <p>
-                      <span className="font-medium text-foreground">Vintage:</span>{" "}
-                      {selectedOcrCandidate?.vintageHint || ocrParsed?.vintageHint || "-"}
-                    </p>
-                    <p>
-                      <span className="font-medium text-foreground">Regulation:</span>{" "}
-                      {selectedOcrCandidate?.regulationMark || ocrParsed?.regulationMark || "-"}
-                    </p>
-                    <p>
-                      <span className="font-medium text-foreground">Illustrateur:</span>{" "}
-                      {selectedOcrCandidate?.illustrator || ocrParsed?.illustrator || "-"}
-                    </p>
-                    <p>
-                      <span className="font-medium text-foreground">Annee:</span>{" "}
-                      {selectedOcrCandidate?.releaseYear ?? "-"}
-                    </p>
-                    <p className="md:col-span-2">
-                      <span className="font-medium text-foreground">Reference technique:</span>{" "}
-                      {selectedOcrCandidate?.tcgId ||
-                        selectedOcrCandidate?.cardRefId ||
-                        ocrSelectedCardRefId ||
-                        "-"}
-                    </p>
-                  </div>
-                </div>
+                  </section>
                 </div>
 
                 <div className="mt-3 shrink-0 border-t bg-background/95 pt-3 backdrop-blur">

@@ -17,6 +17,7 @@ type ListingFeedBaseRow = Omit<ListingFeedRow, "favorite_count">;
 export type FeedFilters = {
   q: string;
   set: string;
+  rarity: string;
   condition: string;
   is_graded: string;
   grade_min: number | null;
@@ -36,6 +37,7 @@ export function parseFeedFilters(params: Record<string, string | undefined>): Fe
   return {
     q: (params.q ?? "").trim(),
     set: (params.set ?? "").trim(),
+    rarity: (params.rarity ?? "").trim(),
     condition: (params.condition ?? "").trim(),
     is_graded: (params.is_graded ?? "").trim(),
     grade_min: parseOptionalNumber(params.grade_min),
@@ -88,12 +90,15 @@ export async function fetchListingsFeedPage(params: {
     : [];
 
   let cardRefIds: string[] | null = null;
-  if (filters.set) {
-    const { data: cardRefs } = await supabase
-      .from("cards_ref")
-      .select("id")
-      .eq("set_id", filters.set)
-      .limit(2000);
+  if (filters.set || filters.rarity) {
+    let cardRefRequest = supabase.from("cards_ref").select("id");
+    if (filters.set) {
+      cardRefRequest = cardRefRequest.eq("set_id", filters.set);
+    }
+    if (filters.rarity) {
+      cardRefRequest = cardRefRequest.eq("rarity", filters.rarity);
+    }
+    const { data: cardRefs } = await cardRefRequest.limit(2000);
     cardRefIds = (cardRefs ?? []).map((row) => row.id);
     if (cardRefIds.length === 0) {
       return { listings: [] as ListingFeedRow[], hasNextPage: false, error: null };

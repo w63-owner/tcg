@@ -52,7 +52,7 @@ export function MobileNav() {
                 <Link
                   href={item.href}
                   className={cn(
-                    "flex flex-col items-center justify-center gap-1 rounded-xl px-2 py-2 text-[11px] transition-colors",
+                    "flex flex-col items-center justify-center gap-0.5 rounded-xl px-2 py-2 text-[10px] transition-colors",
                     isSellItem &&
                       "bg-primary/10 font-semibold text-primary shadow-[0_2px_8px_rgba(0,0,0,0.08)]",
                     active
@@ -61,7 +61,7 @@ export function MobileNav() {
                     isSellItem && active && "bg-primary text-primary-foreground",
                   )}
                 >
-                  <Icon className="h-4 w-4" />
+                  <Icon className="h-5 w-5" />
                   <span>{item.label}</span>
                 </Link>
               </li>

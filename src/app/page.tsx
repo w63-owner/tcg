@@ -7,12 +7,14 @@ import { HomeFilterBar } from "@/components/marketplace/home-filter-bar";
 import { SaveSearchFloatingButton } from "@/components/marketplace/save-search-floating-button";
 import { InfiniteListingsFeed } from "@/components/marketplace/infinite-listings-feed";
 import { PullToRefresh } from "@/components/marketplace/pull-to-refresh";
+import { HomeAttributeFilters } from "@/components/marketplace/home-attribute-filters";
 import { fetchListingsFeedPage, fetchSetOptions, parseFeedFilters } from "@/lib/listings/feed";
 
 type HomeProps = {
   searchParams: Promise<{
     q?: string;
     set?: string;
+    rarity?: string;
     condition?: string;
     is_graded?: string;
     grade_min?: string;
@@ -28,6 +30,7 @@ export default async function Home({ searchParams }: HomeProps) {
   const filters = parseFeedFilters({
     q: params.q,
     set: params.set,
+    rarity: params.rarity,
     condition: params.condition,
     is_graded: params.is_graded,
     grade_min: params.grade_min,
@@ -38,6 +41,7 @@ export default async function Home({ searchParams }: HomeProps) {
   });
   const query = filters.q;
   const setFilter = filters.set;
+  const rarity = filters.rarity;
   const condition = filters.condition;
   const isGraded = filters.is_graded;
   const gradeMin = filters.grade_min;
@@ -77,6 +81,7 @@ export default async function Home({ searchParams }: HomeProps) {
   const currentSearchParams = JSON.stringify({
     q: query || undefined,
     set: setFilter || undefined,
+    rarity: rarity || undefined,
     condition: condition || undefined,
     is_graded: isGraded || undefined,
     grade_min: gradeMin !== null ? String(gradeMin) : undefined,
@@ -89,6 +94,7 @@ export default async function Home({ searchParams }: HomeProps) {
     Object.entries({
       q: query || undefined,
       set: setFilter || undefined,
+      rarity: rarity || undefined,
       condition: condition || undefined,
       is_graded: isGraded || undefined,
       grade_min: gradeMin !== null ? String(gradeMin) : undefined,
@@ -139,58 +145,10 @@ export default async function Home({ searchParams }: HomeProps) {
     return qs ? `/search?${qs}` : "/search";
   };
 
-  const conditionOptions = [
-    { value: "", label: "Tous etats" },
-    { value: "MINT", label: "Mint" },
-    { value: "NEAR_MINT", label: "Near mint" },
-    { value: "EXCELLENT", label: "Excellent" },
-    { value: "GOOD", label: "Good" },
-    { value: "LIGHT_PLAYED", label: "Light played" },
-    { value: "PLAYED", label: "Played" },
-    { value: "POOR", label: "Poor" },
-  ];
-  const gradedOptions = [
-    { value: "", label: "Toutes cartes" },
-    { value: "1", label: "Gradees" },
-    { value: "0", label: "Non gradees" },
-  ];
-  const sortOptions = [
-    { value: "date_desc", label: "Plus recent" },
-    { value: "price_asc", label: "Prix croissant" },
-    { value: "price_desc", label: "Prix decroissant" },
-    { value: "grade_desc", label: "Note decroissante" },
-  ];
-
-  const quickBadges: Array<{ key: string; label: string; href: string; active: boolean }> = [
-    {
-      key: "set-edit",
-      label: setFilter ? `Serie: ${setFilter}` : "Serie",
-      href: buildEditorHref({}),
-      active: Boolean(setFilter),
-    },
-    ...conditionOptions.map((option) => ({
-      key: `condition-${option.value || "all"}`,
-      label: option.label,
-      href: buildEditorHref({ condition: option.value }),
-      active: condition === option.value,
-    })),
-    ...gradedOptions.map((option) => ({
-      key: `graded-${option.value || "all"}`,
-      label: option.label,
-      href: buildEditorHref({ is_graded: option.value }),
-      active: isGraded === option.value,
-    })),
-    ...sortOptions.map((option) => ({
-      key: `sort-${option.value}`,
-      label: option.label,
-      href: buildEditorHref({ sort: option.value }),
-      active: (sort || "date_desc") === option.value,
-    })),
-  ];
-
   const hasAnyFilter = Boolean(
     query ||
       setFilter ||
+      rarity ||
       condition ||
       isGraded ||
       gradeMin !== null ||
@@ -217,21 +175,14 @@ export default async function Home({ searchParams }: HomeProps) {
           setOptions={setOptions}
         />
         <div className="space-y-2">
-          <div className="hide-scrollbar flex gap-2 overflow-x-auto pb-1">
-            {quickBadges.map((badge) => (
-              <Link
-                key={badge.key}
-                href={badge.href}
-                className={`shrink-0 rounded-full border px-3 py-1 text-xs ${
-                  badge.active
-                    ? "border-primary/50 bg-primary/10 text-primary"
-                    : "bg-muted text-muted-foreground"
-                }`}
-              >
-                {badge.label}
-              </Link>
-            ))}
-          </div>
+          <HomeAttributeFilters
+            setOptions={setOptions}
+            setFilter={setFilter}
+            rarity={rarity}
+            condition={condition}
+            isGraded={isGraded}
+            sort={sort}
+          />
           {hasAnyFilter ? (
             <Link href="/" className="inline-flex text-xs underline">
               Reset all filters
@@ -282,6 +233,7 @@ export default async function Home({ searchParams }: HomeProps) {
           filters={{
             q: query || undefined,
             set: setFilter || undefined,
+            rarity: rarity || undefined,
             condition: condition || undefined,
             is_graded: isGraded || undefined,
             grade_min: gradeMin !== null ? String(gradeMin) : undefined,
