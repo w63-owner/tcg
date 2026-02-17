@@ -239,7 +239,13 @@ export default async function Home({ searchParams }: HomeProps) {
           ) : null}
         </div>
         {user ? (
-          <form action={saveSearch} className="hidden flex-wrap gap-2 md:flex">
+          <form
+            action={async (formData) => {
+              "use server";
+              await saveSearch(formData);
+            }}
+            className="hidden flex-wrap gap-2 md:flex"
+          >
             <Input
               name="name"
               placeholder="Nom de cette recherche"

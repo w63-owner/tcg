@@ -12,6 +12,8 @@ export type ListingFeedRow = {
   favorite_count: number;
 };
 
+type ListingFeedBaseRow = Omit<ListingFeedRow, "favorite_count">;
+
 export type FeedFilters = {
   q: string;
   set: string;
@@ -163,7 +165,7 @@ export async function fetchListingsFeedPage(params: {
     return { listings: [] as ListingFeedRow[], hasNextPage: false, error: error.message };
   }
 
-  const rows = (data ?? []) as ListingFeedRow[];
+  const rows = (data ?? []) as ListingFeedBaseRow[];
   const hasNextPage = rows.length > pageSize;
   const pageRows = rows.slice(0, pageSize);
 

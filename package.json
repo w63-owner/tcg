@@ -14,7 +14,8 @@
     "stress:auth": "node scripts/stress-auth.mjs",
     "rls:audit": "node scripts/rls-intrusion-audit.mjs",
     "seed:listings": "node scripts/seed-listings.mjs",
-    "seed:listings:massive": "node scripts/seed-listings.mjs 120"
+    "seed:listings:massive": "node scripts/seed-listings.mjs 120",
+    "seed:price-guide": "node scripts/seed-price-guide.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.8.0",
