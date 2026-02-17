@@ -15,6 +15,7 @@ type CardItemProps = {
   condition?: string | null;
   isGraded: boolean;
   gradeNote?: number | null;
+  favoriteCount?: number;
   showFavoriteToggle?: boolean;
   initialFavorite?: boolean;
 };
@@ -29,6 +30,7 @@ export function CardItem({
   condition,
   isGraded,
   gradeNote,
+  favoriteCount = 0,
   showFavoriteToggle = false,
   initialFavorite = false,
 }: CardItemProps) {
@@ -72,9 +74,19 @@ export function CardItem({
             {finalDisplayPrice.toFixed(2)} EUR
           </p>
         </div>
-        {showFavoriteToggle ? (
-          <FavoriteListingToggle listingId={id} initialLiked={initialFavorite} />
-        ) : null}
+        <div className="flex items-center gap-1.5">
+          {showFavoriteToggle ? (
+            <FavoriteListingToggle
+              listingId={id}
+              initialLiked={initialFavorite}
+              initialCount={favoriteCount}
+            />
+          ) : (
+            <span className="text-muted-foreground inline-flex h-8 min-w-8 items-center justify-center rounded-full border px-2 text-xs">
+              {favoriteCount}
+            </span>
+          )}
+        </div>
       </CardFooter>
     </Card>
   );

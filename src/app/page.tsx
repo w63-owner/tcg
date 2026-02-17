@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { HomeFilterBar } from "@/components/marketplace/home-filter-bar";
 import { SaveSearchFloatingButton } from "@/components/marketplace/save-search-floating-button";
 import { InfiniteListingsFeed } from "@/components/marketplace/infinite-listings-feed";
+import { PullToRefresh } from "@/components/marketplace/pull-to-refresh";
 import { fetchListingsFeedPage, fetchSetOptions, parseFeedFilters } from "@/lib/listings/feed";
 
 type HomeProps = {
@@ -100,63 +101,103 @@ export default async function Home({ searchParams }: HomeProps) {
     >,
   ).toString()}`;
 
-  const activeFilters: Array<{ key: string; label: string; href: string }> = [];
-  const withFilterRemoved = (key: string) => {
-    const draft = Object.fromEntries(
-      Object.entries(params).filter(([, value]) => typeof value === "string"),
-    ) as Record<string, string>;
-    delete draft[key];
-    delete draft.page;
+  const baseParams = Object.fromEntries(
+    Object.entries(params).filter(([, value]) => typeof value === "string"),
+  ) as Record<string, string>;
+  delete baseParams.page;
+
+  const buildHref = (
+    updates: Partial<Record<string, string>>,
+    removedKeys: string[] = [],
+  ) => {
+    const draft = { ...baseParams };
+    removedKeys.forEach((key) => delete draft[key]);
+    Object.entries(updates).forEach(([key, value]) => {
+      if (!value?.trim()) {
+        delete draft[key];
+      } else {
+        draft[key] = value;
+      }
+    });
     const qs = new URLSearchParams(draft).toString();
     return qs ? `/?${qs}` : "/";
   };
-  const withFiltersRemoved = (keys: string[]) => {
-    const draft = Object.fromEntries(
-      Object.entries(params).filter(([, value]) => typeof value === "string"),
-    ) as Record<string, string>;
-    keys.forEach((key) => delete draft[key]);
-    delete draft.page;
-    const qs = new URLSearchParams(draft).toString();
-    return qs ? `/?${qs}` : "/";
-  };
-  if (query) activeFilters.push({ key: "q", label: `Recherche: ${query}`, href: withFilterRemoved("q") });
-  if (setFilter) activeFilters.push({ key: "set", label: `Set: ${setFilter}`, href: withFilterRemoved("set") });
-  if (condition) {
-    activeFilters.push({
-      key: "condition",
-      label: `Etat: ${condition}`,
-      href: withFilterRemoved("condition"),
-    });
-  }
-  if (isGraded === "1" || isGraded === "0") {
-    activeFilters.push({
-      key: "is_graded",
-      label: isGraded === "1" ? "Gradee" : "Non gradee",
-      href: withFilterRemoved("is_graded"),
-    });
-  }
-  if (priceMin !== null || priceMax !== null) {
-    activeFilters.push({
-      key: "price",
-      label: `Prix: ${priceMin !== null ? priceMin : 0}-${priceMax !== null ? priceMax : "∞"}`,
-      href: withFiltersRemoved(["price_min", "price_max"]),
-    });
-  }
-  if (gradeMin !== null || gradeMax !== null) {
-    activeFilters.push({
-      key: "grade",
-      label: `Note: ${gradeMin !== null ? gradeMin : 1}-${gradeMax !== null ? gradeMax : 10}`,
-      href: withFiltersRemoved(["grade_min", "grade_max"]),
-    });
-  }
-  if (sort && sort !== "date_desc") {
-    activeFilters.push({ key: "sort", label: `Tri: ${sort}`, href: withFilterRemoved("sort") });
-  }
+
+  const conditionOptions = [
+    { value: "", label: "Tous etats" },
+    { value: "MINT", label: "Mint" },
+    { value: "NEAR_MINT", label: "Near mint" },
+    { value: "EXCELLENT", label: "Excellent" },
+    { value: "GOOD", label: "Good" },
+    { value: "LIGHT_PLAYED", label: "Light played" },
+    { value: "PLAYED", label: "Played" },
+    { value: "POOR", label: "Poor" },
+  ];
+  const gradedOptions = [
+    { value: "", label: "Toutes cartes" },
+    { value: "1", label: "Gradees" },
+    { value: "0", label: "Non gradees" },
+  ];
+  const sortOptions = [
+    { value: "date_desc", label: "Plus recent" },
+    { value: "price_asc", label: "Prix croissant" },
+    { value: "price_desc", label: "Prix decroissant" },
+    { value: "grade_desc", label: "Note decroissante" },
+  ];
+
+  const quickBadges: Array<{ key: string; label: string; href: string; active: boolean }> = [
+    {
+      key: "search-edit",
+      label: query ? `Recherche: ${query}` : "Recherche",
+      href: Object.keys(baseParams).length > 0
+        ? `/search?${new URLSearchParams(baseParams).toString()}`
+        : "/search",
+      active: Boolean(query),
+    },
+    {
+      key: "set-edit",
+      label: setFilter ? `Serie: ${setFilter}` : "Serie",
+      href: Object.keys(baseParams).length > 0
+        ? `/search?${new URLSearchParams(baseParams).toString()}`
+        : "/search",
+      active: Boolean(setFilter),
+    },
+    ...conditionOptions.map((option) => ({
+      key: `condition-${option.value || "all"}`,
+      label: option.label,
+      href: buildHref({ condition: option.value }),
+      active: condition === option.value,
+    })),
+    ...gradedOptions.map((option) => ({
+      key: `graded-${option.value || "all"}`,
+      label: option.label,
+      href: buildHref({ is_graded: option.value }),
+      active: isGraded === option.value,
+    })),
+    ...sortOptions.map((option) => ({
+      key: `sort-${option.value}`,
+      label: option.label,
+      href: buildHref({ sort: option.value }),
+      active: (sort || "date_desc") === option.value,
+    })),
+  ];
+
+  const hasAnyFilter = Boolean(
+    query ||
+      setFilter ||
+      condition ||
+      isGraded ||
+      gradeMin !== null ||
+      gradeMax !== null ||
+      priceMin !== null ||
+      priceMax !== null ||
+      (sort && sort !== "date_desc"),
+  );
 
   return (
     <section className="space-y-4">
+      <PullToRefresh />
       <header className="space-y-3">
-        <h1 className="text-2xl font-semibold">Marketplace Pokemon</h1>
         <HomeFilterBar
           query={query}
           setFilter={setFilter}
@@ -169,22 +210,28 @@ export default async function Home({ searchParams }: HomeProps) {
           sort={sort}
           setOptions={setOptions}
         />
-        {activeFilters.length > 0 ? (
-          <div className="flex flex-wrap items-center gap-2">
-            {activeFilters.map((filter) => (
+        <div className="space-y-2">
+          <div className="hide-scrollbar flex gap-2 overflow-x-auto pb-1">
+            {quickBadges.map((badge) => (
               <Link
-                key={filter.key}
-                href={filter.href}
-                className="rounded-full border px-3 py-1 text-xs"
+                key={badge.key}
+                href={badge.href}
+                className={`shrink-0 rounded-full border px-3 py-1 text-xs ${
+                  badge.active
+                    ? "border-primary/50 bg-primary/10 text-primary"
+                    : "bg-muted text-muted-foreground"
+                }`}
               >
-                {filter.label} ×
+                {badge.label}
               </Link>
             ))}
-            <Link href="/" className="text-xs underline">
+          </div>
+          {hasAnyFilter ? (
+            <Link href="/" className="inline-flex text-xs underline">
               Reset all filters
             </Link>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
         {user ? (
           <form action={saveSearch} className="hidden flex-wrap gap-2 md:flex">
             <Input
@@ -198,6 +245,8 @@ export default async function Home({ searchParams }: HomeProps) {
           </form>
         ) : null}
       </header>
+
+      <h2 className="text-lg font-semibold">Nouveautes</h2>
 
       {error ? (
         <div className="border-destructive/40 bg-destructive/10 rounded-md border p-3 text-sm">
@@ -234,7 +283,7 @@ export default async function Home({ searchParams }: HomeProps) {
         />
       )}
 
-      {user && activeFilters.length > 0 ? (
+      {user && hasAnyFilter ? (
         <SaveSearchFloatingButton currentSearchParams={currentSearchParams} />
       ) : null}
     </section>

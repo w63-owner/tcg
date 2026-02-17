@@ -124,6 +124,7 @@ export function InfiniteListingsFeed({
             condition={listing.condition}
             isGraded={listing.is_graded}
             gradeNote={listing.grade_note}
+            favoriteCount={listing.favorite_count}
             showFavoriteToggle={showFavoriteToggle}
             initialFavorite={listing.initialFavorite}
           />

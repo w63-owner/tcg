@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { requireAuthenticatedUser } from "@/lib/auth/require-authenticated-user";
+import { fetchCardRefIdsByQuery } from "@/lib/listings/feed";
 import { removeFavoriteListing, removeFavoriteSeller } from "./actions";
 import { SavedSearchesRealtimeListener } from "./saved-searches-realtime-listener";
 import { SavedSearchItem } from "./saved-search-item";
@@ -148,6 +149,7 @@ async function countNewListingsForSavedSearch(
   const gradeMax = parseOptionalNumber(params.grade_max);
   const priceMin = parseOptionalNumber(params.price_min);
   const priceMax = parseOptionalNumber(params.price_max);
+  const queryCardRefIds = query ? await fetchCardRefIdsByQuery(supabase, query) : [];
 
   let cardRefIds: string[] | null = null;
   if (setFilter) {
@@ -166,7 +168,13 @@ async function countNewListingsForSavedSearch(
     .eq("status", "ACTIVE")
     .gt("created_at", row.created_at);
 
-  if (query) request = request.ilike("title", `%${query}%`);
+  if (query) {
+    if (queryCardRefIds.length > 0) {
+      request = request.or(`title.ilike.%${query}%,card_ref_id.in.(${queryCardRefIds.join(",")})`);
+    } else {
+      request = request.ilike("title", `%${query}%`);
+    }
+  }
   if (setFilter && cardRefIds) request = request.in("card_ref_id", cardRefIds);
   if (condition) request = request.eq("condition", condition);
   if (isGraded === "1") request = request.eq("is_graded", true);

@@ -1,10 +1,21 @@
 "use client";
 
-import { useEffect, useRef, useTransition } from "react";
-import { toast } from "sonner";
-import { updateSavedSearchCriteria } from "@/app/favorites/actions";
-import { Button } from "@/components/ui/button";
+import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { Input } from "@/components/ui/input";
+
+type SavedSearchSummary = {
+  id: string;
+  title: string;
+  href: string;
+  criteria: string[];
+};
+
+type RecentSearchSummary = {
+  title: string;
+  href: string;
+  criteria: string[];
+};
 
 type MarketplaceSearchPageFormProps = {
   query: string;
@@ -16,8 +27,7 @@ type MarketplaceSearchPageFormProps = {
   priceMin: string;
   priceMax: string;
   sort: string;
-  setOptions: string[];
-  savedSearchId?: string;
+  savedSearches: SavedSearchSummary[];
 };
 
 export function MarketplaceSearchPageForm({
@@ -30,161 +40,148 @@ export function MarketplaceSearchPageForm({
   priceMin,
   priceMax,
   sort,
-  setOptions,
-  savedSearchId,
+  savedSearches,
 }: MarketplaceSearchPageFormProps) {
   const queryRef = useRef<HTMLInputElement | null>(null);
-  const formRef = useRef<HTMLFormElement | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [recentSearches, setRecentSearches] = useState<RecentSearchSummary[]>([]);
 
   useEffect(() => {
     queryRef.current?.focus();
     queryRef.current?.select();
   }, []);
 
-  const onUpdateSavedSearch = () => {
-    if (!savedSearchId || !formRef.current) return;
+  const currentSearch = useMemo<RecentSearchSummary | null>(() => {
+    const params = new URLSearchParams();
+    if (query) params.set("q", query);
+    if (setFilter) params.set("set", setFilter);
+    if (condition) params.set("condition", condition);
+    if (isGraded) params.set("is_graded", isGraded);
+    if (gradeMin) params.set("grade_min", gradeMin);
+    if (gradeMax) params.set("grade_max", gradeMax);
+    if (priceMin) params.set("price_min", priceMin);
+    if (priceMax) params.set("price_max", priceMax);
+    if (sort && sort !== "date_desc") params.set("sort", sort);
 
-    const formData = new FormData(formRef.current);
-    const keys = [
-      "q",
-      "set",
-      "condition",
-      "is_graded",
-      "grade_min",
-      "grade_max",
-      "price_min",
-      "price_max",
-      "sort",
-    ] as const;
-    const searchParams = Object.fromEntries(
-      keys
-        .map((key) => [key, String(formData.get(key) ?? "").trim()] as const)
-        .filter(([, value]) => value.length > 0),
-    );
+    if (params.toString().length === 0) {
+      return null;
+    }
 
-    const payload = new FormData();
-    payload.set("saved_search_id", savedSearchId);
-    payload.set("search_params", JSON.stringify(searchParams));
-    payload.set("name", String(formData.get("q") ?? "").trim());
+    const criteria: string[] = [];
+    if (setFilter) criteria.push(setFilter);
+    if (condition) criteria.push(condition);
+    if (isGraded === "1") criteria.push("Gradee");
+    if (isGraded === "0") criteria.push("Non gradee");
+    if (gradeMin || gradeMax) criteria.push(`${gradeMin || "1"}-${gradeMax || "10"}`);
+    if (priceMin || priceMax) criteria.push(`${priceMin || "0"}-${priceMax || "∞"} EUR`);
+    if (sort && sort !== "date_desc") criteria.push(sort);
 
-    startTransition(async () => {
-      const result = await updateSavedSearchCriteria(payload);
-      if (!result?.ok) {
-        toast.error("Impossible de mettre a jour la recherche sauvegardee.");
-        return;
-      }
-      toast.success("Recherche sauvegardee mise a jour.");
-    });
-  };
+    return {
+      title: query || "Recherche recente",
+      href: `/?${params.toString()}`,
+      criteria,
+    };
+  }, [
+    condition,
+    gradeMax,
+    gradeMin,
+    isGraded,
+    priceMax,
+    priceMin,
+    query,
+    setFilter,
+    sort,
+  ]);
+
+  useEffect(() => {
+    const STORAGE_KEY = "tcg_recent_searches";
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      const parsed = raw ? (JSON.parse(raw) as RecentSearchSummary[]) : [];
+      const normalized = Array.isArray(parsed) ? parsed : [];
+      const deduped = normalized.filter(
+        (item): item is RecentSearchSummary =>
+          Boolean(item?.href && typeof item.href === "string" && item.title),
+      );
+
+      const merged = currentSearch
+        ? [currentSearch, ...deduped.filter((item) => item.href !== currentSearch.href)]
+        : deduped;
+      const limited = merged.slice(0, 8);
+      setRecentSearches(limited);
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(limited));
+    } catch {
+      setRecentSearches(currentSearch ? [currentSearch] : []);
+    }
+  }, [currentSearch]);
 
   return (
-    <form ref={formRef} action="/" className="grid gap-2">
+    <form action="/" className="space-y-4">
       <Input
         ref={queryRef}
         name="q"
         defaultValue={query}
         placeholder="Rechercher une carte, un set, un vendeur..."
       />
-      <select
-        name="set"
-        defaultValue={setFilter}
-        className="border-input h-9 rounded-md border bg-transparent px-3 text-sm"
-      >
-        <option value="">Tous les sets</option>
-        {setOptions.map((setId) => (
-          <option key={setId} value={setId}>
-            {setId}
-          </option>
-        ))}
-      </select>
-      <select
-        name="condition"
-        defaultValue={condition}
-        className="border-input h-9 rounded-md border bg-transparent px-3 text-sm"
-      >
-        <option value="">Tous les etats</option>
-        <option value="MINT">MINT</option>
-        <option value="NEAR_MINT">NEAR_MINT</option>
-        <option value="EXCELLENT">EXCELLENT</option>
-        <option value="GOOD">GOOD</option>
-        <option value="LIGHT_PLAYED">LIGHT_PLAYED</option>
-        <option value="PLAYED">PLAYED</option>
-        <option value="POOR">POOR</option>
-      </select>
-      <select
-        name="is_graded"
-        defaultValue={isGraded}
-        className="border-input h-9 rounded-md border bg-transparent px-3 text-sm"
-      >
-        <option value="">Gradee + non gradee</option>
-        <option value="1">Seulement gradees</option>
-        <option value="0">Seulement non gradees</option>
-      </select>
-      <div className="grid grid-cols-2 gap-2">
-        <Input
-          name="grade_min"
-          defaultValue={gradeMin}
-          placeholder="Note min"
-          type="number"
-          min="1"
-          max="10"
-          step="0.5"
-        />
-        <Input
-          name="grade_max"
-          defaultValue={gradeMax}
-          placeholder="Note max"
-          type="number"
-          min="1"
-          max="10"
-          step="0.5"
-        />
+
+      <div className="space-y-2 rounded-md border p-3">
+        <p className="text-sm font-medium">Mes recherches sauvegardees</p>
+        {savedSearches.length === 0 ? (
+          <p className="text-muted-foreground text-xs">Aucune recherche sauvegardee.</p>
+        ) : (
+          <div className="space-y-2">
+            {savedSearches.map((savedSearch) => (
+              <div key={savedSearch.id} className="space-y-1">
+                <Link href={savedSearch.href} className="text-sm font-medium underline">
+                  {savedSearch.title}
+                </Link>
+                {savedSearch.criteria.length > 0 ? (
+                  <div className="flex gap-1 overflow-x-auto pb-1">
+                    {savedSearch.criteria.map((criterion) => (
+                      <Link
+                        key={`${savedSearch.id}-${criterion}`}
+                        href={savedSearch.href}
+                        className="bg-muted text-muted-foreground shrink-0 rounded-full border px-2 py-0.5 text-[10px]"
+                      >
+                        {criterion}
+                      </Link>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        <Input
-          name="price_min"
-          defaultValue={priceMin}
-          placeholder="Prix min"
-          type="number"
-          min="0"
-          step="0.01"
-        />
-        <Input
-          name="price_max"
-          defaultValue={priceMax}
-          placeholder="Prix max"
-          type="number"
-          min="0"
-          step="0.01"
-        />
+
+      <div className="space-y-2 rounded-md border p-3">
+        <p className="text-sm font-medium">Mes recherches recentes</p>
+        {recentSearches.length === 0 ? (
+          <p className="text-muted-foreground text-xs">Aucune recherche recente.</p>
+        ) : (
+          <div className="space-y-2">
+            {recentSearches.map((search) => (
+              <div key={search.href} className="space-y-1">
+                <Link href={search.href} className="text-sm font-medium underline">
+                  {search.title}
+                </Link>
+                {search.criteria.length > 0 ? (
+                  <div className="flex gap-1 overflow-x-auto pb-1">
+                    {search.criteria.map((criterion) => (
+                      <Link
+                        key={`${search.href}-${criterion}`}
+                        href={search.href}
+                        className="bg-muted text-muted-foreground shrink-0 rounded-full border px-2 py-0.5 text-[10px]"
+                      >
+                        {criterion}
+                      </Link>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-      <select
-        name="sort"
-        defaultValue={sort}
-        className="border-input h-9 rounded-md border bg-transparent px-3 text-sm"
-      >
-        <option value="date_desc">Plus recent</option>
-        <option value="date_asc">Plus ancien</option>
-        <option value="price_asc">Prix croissant</option>
-        <option value="price_desc">Prix decroissant</option>
-        <option value="grade_desc">Note decroissante</option>
-        <option value="grade_asc">Note croissante</option>
-      </select>
-      <input type="hidden" name="page" value="1" />
-      <Button type="submit" className="mt-1">
-        Appliquer les filtres
-      </Button>
-      {savedSearchId ? (
-        <Button
-          type="button"
-          variant="outline"
-          disabled={isPending}
-          onClick={onUpdateSavedSearch}
-        >
-          Mettre a jour cette recherche sauvegardee
-        </Button>
-      ) : null}
     </form>
   );
 }

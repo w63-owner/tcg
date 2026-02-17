@@ -27,6 +27,12 @@ function isActiveRoute(pathname: string, href: string) {
 
 export function MobileNav() {
   const pathname = usePathname();
+  const hideOnSellFlow = pathname === "/sell" || pathname.startsWith("/sell/");
+  const hideOnSearch = pathname === "/search" || pathname.startsWith("/search/");
+
+  if (hideOnSellFlow || hideOnSearch) {
+    return null;
+  }
 
   return (
     <>

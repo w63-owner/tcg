@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
 import { MarketplaceSearchPageForm } from "@/components/marketplace/search-page-form";
@@ -21,6 +22,65 @@ type SearchPageProps = {
   searchParams: Promise<SearchParams>;
 };
 
+type SavedSearchSummary = {
+  id: string;
+  title: string;
+  href: string;
+  criteria: string[];
+};
+
+function buildSearchHref(params: Record<string, string>) {
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value?.trim()) {
+      search.set(key, value);
+    }
+  });
+  const query = search.toString();
+  return query ? `/?${query}` : "/";
+}
+
+function formatCondition(condition: string) {
+  const map: Record<string, string> = {
+    MINT: "Mint",
+    NEAR_MINT: "Near mint",
+    EXCELLENT: "Excellent",
+    GOOD: "Good",
+    LIGHT_PLAYED: "Light played",
+    PLAYED: "Played",
+    POOR: "Poor",
+  };
+  return map[condition] ?? condition;
+}
+
+function formatSort(sort: string) {
+  const map: Record<string, string> = {
+    date_desc: "Plus recent",
+    date_asc: "Plus ancien",
+    price_asc: "Prix croissant",
+    price_desc: "Prix decroissant",
+    grade_desc: "Note decroissante",
+    grade_asc: "Note croissante",
+  };
+  return map[sort] ?? sort;
+}
+
+function describeSavedSearchCriteria(params: Record<string, string>) {
+  const criteria: string[] = [];
+  if (params.set) criteria.push(params.set);
+  if (params.condition) criteria.push(formatCondition(params.condition));
+  if (params.is_graded === "1") criteria.push("Gradee");
+  if (params.is_graded === "0") criteria.push("Non gradee");
+  if (params.grade_min || params.grade_max) {
+    criteria.push(`${params.grade_min || "1"}-${params.grade_max || "10"}`);
+  }
+  if (params.price_min || params.price_max) {
+    criteria.push(`${params.price_min || "0"}-${params.price_max || "∞"} EUR`);
+  }
+  if (params.sort && params.sort !== "date_desc") criteria.push(formatSort(params.sort));
+  return criteria;
+}
+
 export default async function SearchPage({ searchParams }: SearchPageProps) {
   const params = await searchParams;
   const query = (params.q ?? "").trim();
@@ -32,29 +92,45 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const priceMin = (params.price_min ?? "").trim();
   const priceMax = (params.price_max ?? "").trim();
   const sort = (params.sort ?? "date_desc").trim();
-  const savedSearchId = (params.saved_search_id ?? "").trim();
 
   const supabase = await createClient();
-  const { data: setRows } = await supabase
-    .from("cards_ref")
-    .select("set_id")
-    .order("set_id", { ascending: true })
-    .limit(500);
-  const setOptions = Array.from(
-    new Set((setRows ?? []).map((row) => row.set_id).filter(Boolean)),
-  );
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  let savedSearches: SavedSearchSummary[] = [];
+  if (user) {
+    const { data: savedRows } = await supabase
+      .from("saved_searches")
+      .select("id, name, search_params")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(12);
+
+    savedSearches = (savedRows ?? []).map((row) => {
+      const searchParamsRecord = (row.search_params ?? {}) as Record<string, string>;
+      return {
+        id: row.id as string,
+        title:
+          searchParamsRecord.q?.trim() || String((row.name as string | null | undefined) ?? "").trim() || "Recherche sauvegardee",
+        href: buildSearchHref(searchParamsRecord),
+        criteria: describeSavedSearchCriteria(searchParamsRecord),
+      };
+    });
+  }
 
   return (
     <section className="space-y-4">
       <SearchPageToast />
       <header className="space-y-1">
-        <Button asChild variant="ghost" size="sm" className="mb-1 -ml-2">
-          <Link href="/">Retour au marketplace</Link>
-        </Button>
-        <h1 className="text-2xl font-semibold">Recherche</h1>
-        <p className="text-muted-foreground text-sm">
-          Ajuste tes filtres puis affiche les annonces du marketplace.
-        </p>
+        <div className="flex items-center gap-2">
+          <Button asChild variant="ghost" size="icon" className="h-9 w-9 -ml-2">
+            <Link href="/" aria-label="Retour au marketplace">
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
+          </Button>
+          <h1 className="text-2xl font-semibold">Recherche</h1>
+        </div>
       </header>
 
       <MarketplaceSearchPageForm
@@ -67,8 +143,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         priceMin={priceMin}
         priceMax={priceMax}
         sort={sort}
-        setOptions={setOptions}
-        savedSearchId={savedSearchId || undefined}
+        savedSearches={savedSearches}
       />
     </section>
   );

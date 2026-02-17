@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -34,7 +35,7 @@ function FilterFields({
       <Input
         name="q"
         defaultValue={query}
-        placeholder="Rechercher une carte, un set, un vendeur..."
+        placeholder="Nom de la carte, numero (ex : Dracaufeu 4/102)"
         className="xl:col-span-2"
       />
       <select
@@ -113,9 +114,10 @@ export function HomeFilterBar(props: HomeFilterBarProps) {
         <Link
           href={triggerHref}
           aria-label="Ouvrir la recherche et les filtres"
-          className="file:text-foreground placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground dark:bg-input/30 border-input flex h-9 w-full min-w-0 items-center rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm"
+          className="file:text-foreground placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground dark:bg-input/30 border-input flex h-9 w-full min-w-0 items-center gap-2 rounded-md border bg-transparent px-3 py-1 text-sm shadow-xs transition-[color,box-shadow] outline-none md:text-sm"
         >
-          {props.query || "Rechercher une carte, un set, un vendeur..."}
+          <Search className="text-muted-foreground h-4 w-4 shrink-0" />
+          {props.query || "Nom de la carte, numero (ex : Dracaufeu 4/102)"}
         </Link>
       </div>
 

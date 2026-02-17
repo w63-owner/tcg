@@ -9,7 +9,6 @@ import { createPortal } from "react-dom";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
@@ -240,9 +239,23 @@ export function SellForm() {
           : true;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Creation d&apos;annonce</CardTitle>
+    <section className="space-y-4">
+      <header className="space-y-2">
+        <div className="flex items-center gap-2">
+          {step > 1 ? (
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="h-9 w-9"
+              onClick={() => setStep((current) => Math.max(1, current - 1))}
+              aria-label="Etape precedente"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          ) : null}
+          <h1 className="text-2xl font-semibold">Creation d&apos;annonce</h1>
+        </div>
         <div className="flex flex-wrap gap-2">
           {checkpoints.map((checkpoint) => (
             <Badge key={checkpoint.label} variant={checkpoint.done ? "secondary" : "outline"}>
@@ -250,11 +263,12 @@ export function SellForm() {
             </Badge>
           ))}
         </div>
-      </CardHeader>
-      <CardContent>
+      </header>
+      <div>
         <form
+          id="sell-form"
           action={formAction}
-          className="space-y-5"
+          className={`space-y-5 ${step === 1 ? "" : "pb-24 md:pb-0"}`}
           onSubmit={(event) => {
             if (step < 4) {
               event.preventDefault();
@@ -422,54 +436,38 @@ export function SellForm() {
             </div>
           ) : null}
 
-          {step === 4 ? (
-            <div className="space-y-2 rounded-md border p-4">
-              <p className="text-sm font-medium">Preview annonce</p>
-              <p className="text-sm">
-                <span className="font-medium">Titre:</span> {titleValue || "A renseigner"}
-              </p>
-              <p className="text-sm">
-                <span className="font-medium">Prix vendeur:</span>{" "}
-                {previewPrice > 0 ? `${previewPrice.toFixed(2)} EUR` : "A renseigner"}
-              </p>
-              <p className="text-sm">
-                <span className="font-medium">Prix affiche estime:</span>{" "}
-                {previewDisplayPrice > 0 ? `${previewDisplayPrice.toFixed(2)} EUR` : "A renseigner"}
-              </p>
-              <p className="text-sm">
-                <span className="font-medium">Mode:</span>{" "}
-                {isGraded ? `Gradee (${derivedCondition})` : "Non gradee"}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Verifie les infos avant publication. Les champs restent modifiables en revenant aux etapes precedentes.
-              </p>
-            </div>
-          ) : null}
-
-          <div className={`flex flex-wrap justify-between gap-2 ${step === 1 ? "hidden" : ""}`}>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={step === 1 || isPending}
-              onClick={() => setStep((current) => Math.max(1, current - 1))}
-            >
-              Etape precedente
-            </Button>
+          <div className={`${step === 1 ? "hidden" : ""}`}>
             {step < 4 ? (
-              <Button
-                type="button"
-                disabled={isPending || !canGoNext}
-                onClick={() => {
-                  setHasSubmittedCurrentFlow(false);
-                  setStep((current) => Math.min(4, current + 1));
-                }}
-              >
-                Etape suivante
-              </Button>
+              <>
+                <div className="hidden md:block">
+                  <Button
+                    type="button"
+                    disabled={isPending || !canGoNext}
+                    onClick={() => {
+                      setHasSubmittedCurrentFlow(false);
+                      setStep((current) => Math.min(4, current + 1));
+                    }}
+                    className="h-11 w-full text-base md:w-auto md:text-sm"
+                  >
+                    Etape suivante
+                  </Button>
+                </div>
+                <div className="fixed inset-x-0 bottom-[max(0.75rem,var(--safe-area-bottom))] z-40 px-4 md:hidden">
+                  <Button
+                    type="button"
+                    disabled={isPending || !canGoNext}
+                    onClick={() => {
+                      setHasSubmittedCurrentFlow(false);
+                      setStep((current) => Math.min(4, current + 1));
+                    }}
+                    className="h-12 w-full text-base shadow-lg"
+                  >
+                    Etape suivante
+                  </Button>
+                </div>
+              </>
             ) : (
-              <Button type="submit" disabled={isPending}>
-                {isPending ? "Publication..." : "Publier l'annonce"}
-              </Button>
+              null
             )}
           </div>
         </form>
@@ -504,7 +502,7 @@ export function SellForm() {
             </div>
           </div>
         ) : null}
-      </CardContent>
+      </div>
       {step === 1 && typeof document !== "undefined"
         ? createPortal(
             <div className="fixed inset-0 z-[100] bg-black text-white">
@@ -596,6 +594,57 @@ export function SellForm() {
             document.body,
           )
         : null}
-    </Card>
+      {step === 4 && typeof document !== "undefined"
+        ? createPortal(
+            <div className="fixed inset-0 z-[110] bg-background">
+              <div className="mx-auto flex h-full w-full max-w-3xl flex-col px-4 pt-5 pb-[max(1rem,var(--safe-area-bottom))] md:px-6">
+                <header className="mb-4 flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="h-9 w-9"
+                    onClick={() => setStep(3)}
+                    aria-label="Retour aux details"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                  </Button>
+                  <h2 className="text-lg font-semibold">Recapitulatif de l&apos;annonce</h2>
+                </header>
+
+                <div className="space-y-3 rounded-md border p-4">
+                  <p className="text-sm">
+                    <span className="font-medium">Titre:</span> {titleValue || "A renseigner"}
+                  </p>
+                  <p className="text-sm">
+                    <span className="font-medium">Prix vendeur:</span>{" "}
+                    {previewPrice > 0 ? `${previewPrice.toFixed(2)} EUR` : "A renseigner"}
+                  </p>
+                  <p className="text-sm">
+                    <span className="font-medium">Prix affiche estime:</span>{" "}
+                    {previewDisplayPrice > 0 ? `${previewDisplayPrice.toFixed(2)} EUR` : "A renseigner"}
+                  </p>
+                  <p className="text-sm">
+                    <span className="font-medium">Mode:</span>{" "}
+                    {isGraded ? `Gradee (${derivedCondition})` : "Non gradee"}
+                  </p>
+                </div>
+
+                <div className="mt-auto pt-4">
+                  <Button
+                    type="submit"
+                    form="sell-form"
+                    disabled={isPending}
+                    className="h-12 w-full text-base shadow-lg"
+                  >
+                    {isPending ? "Publication..." : "Publier"}
+                  </Button>
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+    </section>
   );
 }

@@ -9,6 +9,7 @@ export type ListingFeedRow = {
   condition: string | null;
   is_graded: boolean;
   grade_note: number | null;
+  favorite_count: number;
 };
 
 export type FeedFilters = {
@@ -53,6 +54,19 @@ export async function fetchSetOptions(supabase: SupabaseClient) {
   return Array.from(new Set((setRows ?? []).map((row) => row.set_id).filter(Boolean)));
 }
 
+export async function fetchCardRefIdsByQuery(supabase: SupabaseClient, query: string) {
+  const term = query.trim();
+  if (!term) return [] as string[];
+
+  const { data } = await supabase
+    .from("cards_ref")
+    .select("id")
+    .or(`name.ilike.%${term}%,set_id.ilike.%${term}%,tcg_id.ilike.%${term}%`)
+    .limit(2000);
+
+  return (data ?? []).map((row) => row.id as string);
+}
+
 export async function fetchListingsFeedPage(params: {
   supabase: SupabaseClient;
   filters: FeedFilters;
@@ -64,6 +78,10 @@ export async function fetchListingsFeedPage(params: {
   const pageNumber = Math.max(1, Number(page) || 1);
   const rangeFrom = (pageNumber - 1) * pageSize;
   const rangeTo = rangeFrom + pageSize;
+
+  const queryCardRefIds = filters.q
+    ? await fetchCardRefIdsByQuery(supabase, filters.q)
+    : [];
 
   let cardRefIds: string[] | null = null;
   if (filters.set) {
@@ -87,7 +105,13 @@ export async function fetchListingsFeedPage(params: {
   let tieBreakAscending = false;
 
   if (filters.q) {
-    request = request.ilike("title", `%${filters.q}%`);
+    if (queryCardRefIds.length > 0) {
+      request = request.or(
+        `title.ilike.%${filters.q}%,card_ref_id.in.(${queryCardRefIds.join(",")})`,
+      );
+    } else {
+      request = request.ilike("title", `%${filters.q}%`);
+    }
   }
   if (filters.set && cardRefIds) {
     request = request.in("card_ref_id", cardRefIds);
@@ -141,8 +165,27 @@ export async function fetchListingsFeedPage(params: {
 
   const rows = (data ?? []) as ListingFeedRow[];
   const hasNextPage = rows.length > pageSize;
+  const pageRows = rows.slice(0, pageSize);
+
+  const favoriteCountsByListingId = new Map<string, number>();
+  if (pageRows.length > 0) {
+    const listingIds = pageRows.map((row) => row.id);
+    const { data: favoriteRows } = await supabase
+      .from("favorite_listings")
+      .select("listing_id")
+      .in("listing_id", listingIds);
+
+    for (const row of favoriteRows ?? []) {
+      const key = row.listing_id as string;
+      favoriteCountsByListingId.set(key, (favoriteCountsByListingId.get(key) ?? 0) + 1);
+    }
+  }
+
   return {
-    listings: rows.slice(0, pageSize),
+    listings: pageRows.map((row) => ({
+      ...row,
+      favorite_count: favoriteCountsByListingId.get(row.id) ?? 0,
+    })),
     hasNextPage,
     error: null,
   };
