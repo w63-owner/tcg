@@ -15,24 +15,22 @@ export function loadPaymentCards(): PaymentCard[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
-    return parsed
-      .map((item) => {
-        if (!item || typeof item !== "object") return null;
-        const record = item as Record<string, unknown>;
-        const id = typeof record.id === "string" ? record.id : null;
-        const brand = typeof record.brand === "string" ? record.brand : null;
-        const last4 = typeof record.last4 === "string" ? record.last4 : null;
-        if (!id || !brand || !last4) return null;
-        return {
-          id,
-          brand,
-          last4,
-          holderName: typeof record.holderName === "string" ? record.holderName : undefined,
-          expMonth: typeof record.expMonth === "string" ? record.expMonth : undefined,
-          expYear: typeof record.expYear === "string" ? record.expYear : undefined,
-        } satisfies PaymentCard;
-      })
-      .filter((card): card is PaymentCard => card !== null);
+    const cards: PaymentCard[] = [];
+    for (const item of parsed) {
+      if (!item || typeof item !== "object") continue;
+      const record = item as Record<string, unknown>;
+      const id = typeof record.id === "string" ? record.id : null;
+      const brand = typeof record.brand === "string" ? record.brand : null;
+      const last4 = typeof record.last4 === "string" ? record.last4 : null;
+      if (!id || !brand || !last4) continue;
+
+      const card: PaymentCard = { id, brand, last4 };
+      if (typeof record.holderName === "string") card.holderName = record.holderName;
+      if (typeof record.expMonth === "string") card.expMonth = record.expMonth;
+      if (typeof record.expYear === "string") card.expYear = record.expYear;
+      cards.push(card);
+    }
+    return cards;
   } catch {
     return [];
   }
