@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { ArrowLeft, Clock3, Heart, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatConditionLabel } from "@/lib/listings/condition-label";
@@ -205,33 +204,25 @@ export function MarketplaceSearchPageForm({
 
       {showSavedSection ? (
         <div className="space-y-2">
-          <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
-            Mes recherches sauvegardees
+          <p className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide">
+            <Heart className="h-3.5 w-3.5" />
+            <span>Mes recherches sauvegardees</span>
           </p>
           {filteredSavedSearches.length === 0 ? (
-            <p className="text-muted-foreground text-xs">Aucune recherche sauvegardee.</p>
+            <p className="text-muted-foreground pl-5 text-xs">Aucune recherche sauvegardee.</p>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-2 pl-5">
               {filteredSavedSearches.map((savedSearch) => (
                 <div key={savedSearch.id} className="space-y-1">
-                  <Link href={savedSearch.href} className="text-sm font-normal no-underline">
+                  <Link href={savedSearch.href} className="line-clamp-2 block text-sm font-normal no-underline">
                     {savedSearch.title}
+                    {savedSearch.criteria.length > 0 ? (
+                      <span className="text-muted-foreground text-xs">
+                        {" "}
+                        · {savedSearch.criteria.join(" · ")}
+                      </span>
+                    ) : null}
                   </Link>
-                  {savedSearch.criteria.length > 0 ? (
-                    <div className="flex flex-wrap gap-1">
-                      {savedSearch.criteria.map((criterion) => (
-                        <Link
-                          key={`${savedSearch.id}-${criterion}`}
-                          href={savedSearch.href}
-                          className="shrink-0"
-                        >
-                          <Badge variant="outline" className="text-[10px]">
-                            {criterion}
-                          </Badge>
-                        </Link>
-                      ))}
-                    </div>
-                  ) : null}
                 </div>
               ))}
             </div>
@@ -241,33 +232,25 @@ export function MarketplaceSearchPageForm({
 
       {showRecentSection ? (
         <div className="space-y-2">
-          <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
-            Mes recherches recentes
+          <p className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide">
+            <Clock3 className="h-3.5 w-3.5" />
+            <span>Mes recherches recentes</span>
           </p>
           {filteredRecentSearches.length === 0 ? (
-            <p className="text-muted-foreground text-xs">Aucune recherche recente.</p>
+            <p className="text-muted-foreground pl-5 text-xs">Aucune recherche recente.</p>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-2 pl-5">
               {filteredRecentSearches.map((search) => (
                 <div key={search.href} className="space-y-1">
-                  <Link href={search.href} className="text-sm font-normal no-underline">
+                  <Link href={search.href} className="line-clamp-2 block text-sm font-normal no-underline">
                     {search.title}
+                    {search.criteria.length > 0 ? (
+                      <span className="text-muted-foreground text-xs">
+                        {" "}
+                        · {search.criteria.join(" · ")}
+                      </span>
+                    ) : null}
                   </Link>
-                  {search.criteria.length > 0 ? (
-                    <div className="flex flex-wrap gap-1">
-                      {search.criteria.map((criterion) => (
-                        <Link
-                          key={`${search.href}-${criterion}`}
-                          href={search.href}
-                          className="shrink-0"
-                        >
-                          <Badge variant="outline" className="text-[10px]">
-                            {criterion}
-                          </Badge>
-                        </Link>
-                      ))}
-                    </div>
-                  ) : null}
                 </div>
               ))}
             </div>
@@ -277,15 +260,16 @@ export function MarketplaceSearchPageForm({
 
       {showSuggestionsSection ? (
         <div className="space-y-2">
-          <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
-            Suggestions
+          <p className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide">
+            <Search className="h-3.5 w-3.5" />
+            <span>Suggestions</span>
           </p>
           {suggestions.length === 0 ? (
-            <p className="text-muted-foreground text-xs">
+            <p className="text-muted-foreground pl-5 text-xs">
               Essaie avec le set, la langue, l&apos;etat ou le numero (ex: 10/102).
             </p>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-2 pl-5">
               {suggestions.map((suggestion) => (
                 <div key={suggestion} className="space-y-1">
                   <Link

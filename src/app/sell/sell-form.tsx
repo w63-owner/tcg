@@ -85,6 +85,12 @@ function formatSetLabel(setValue?: string) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function resolveDisplayedSetNumber(candidateCardNumber?: string | null) {
+  const candidate = String(candidateCardNumber ?? "").trim();
+  if (candidate) return candidate;
+  return "-";
+}
+
 type OcrCandidate = {
   cardRefId: string;
   name: string;
@@ -737,8 +743,10 @@ export function SellForm() {
                                   <p className="text-sm">{formatSetLabel(candidate.set) || "-"}</p>
                                 </div>
                                 <div>
-                                  <p className="text-muted-foreground text-xs">Fraction</p>
-                                  <p className="text-sm">{candidate.cardNumber || "-"}</p>
+                                  <p className="text-muted-foreground text-xs">Set number</p>
+                                  <p className="text-sm">
+                                    {resolveDisplayedSetNumber(candidate.cardNumber)}
+                                  </p>
                                 </div>
                                 <div>
                                   <p className="text-muted-foreground text-xs">Langue</p>

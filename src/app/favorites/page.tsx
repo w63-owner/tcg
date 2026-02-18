@@ -121,9 +121,25 @@ function formatSort(sort: string) {
   return map[sort] ?? sort;
 }
 
+function formatRarity(rarity: string) {
+  const map: Record<string, string> = {
+    COMMON: "Commune",
+    UNCOMMON: "Peu commune",
+    RARE: "Rare",
+    HOLO_RARE: "Rare holo",
+    ULTRA_RARE: "Ultra rare",
+    SECRET_RARE: "Secrete rare",
+    PROMO: "Promo",
+    SIR: "SIR",
+    IR: "IR",
+  };
+  return map[rarity] ?? rarity;
+}
+
 function describeSavedSearchCriteria(params: Record<string, string>) {
   const criteria: string[] = [];
   if (params.set) criteria.push(params.set);
+  if (params.rarity) criteria.push(formatRarity(params.rarity));
   if (params.condition) criteria.push(formatCondition(params.condition));
   if (params.is_graded === "1") criteria.push("Gradee");
   if (params.is_graded === "0") criteria.push("Non gradee");
@@ -144,6 +160,7 @@ async function countNewListingsForSavedSearch(
   const params = row.search_params ?? {};
   const query = (params.q ?? "").trim();
   const setFilter = (params.set ?? "").trim();
+  const rarityFilter = (params.rarity ?? "").trim();
   const condition = (params.condition ?? "").trim();
   const isGraded = (params.is_graded ?? "").trim();
   const gradeMin = parseOptionalNumber(params.grade_min);
@@ -153,12 +170,15 @@ async function countNewListingsForSavedSearch(
   const queryCardRefIds = query ? await fetchCardRefIdsByQuery(supabase, query) : [];
 
   let cardRefIds: string[] | null = null;
-  if (setFilter) {
-    const { data: cardRefs } = await supabase
-      .from("cards_ref")
-      .select("id")
-      .eq("set_id", setFilter)
-      .limit(2000);
+  if (setFilter || rarityFilter) {
+    let cardRefRequest = supabase.from("cards_ref").select("id");
+    if (setFilter) {
+      cardRefRequest = cardRefRequest.eq("set_id", setFilter);
+    }
+    if (rarityFilter) {
+      cardRefRequest = cardRefRequest.eq("rarity", rarityFilter);
+    }
+    const { data: cardRefs } = await cardRefRequest.limit(2000);
     cardRefIds = (cardRefs ?? []).map((card) => card.id);
     if (cardRefIds.length === 0) return 0;
   }
@@ -176,7 +196,7 @@ async function countNewListingsForSavedSearch(
       request = request.ilike("title", `%${query}%`);
     }
   }
-  if (setFilter && cardRefIds) request = request.in("card_ref_id", cardRefIds);
+  if ((setFilter || rarityFilter) && cardRefIds) request = request.in("card_ref_id", cardRefIds);
   if (condition) request = request.eq("condition", condition);
   if (isGraded === "1") request = request.eq("is_graded", true);
   if (isGraded === "0") request = request.eq("is_graded", false);

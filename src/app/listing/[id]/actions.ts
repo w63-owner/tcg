@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireAuthenticatedUser } from "@/lib/auth/require-authenticated-user";
+import { logError, logInfo } from "@/lib/observability";
 import {
   calculateDisplayPrice,
   calculateFeeAmount,
@@ -27,6 +28,12 @@ type CheckoutLockResult = {
   listing_id: string;
   seller_id: string;
   listing_title: string;
+};
+
+type SellerListingManageRow = {
+  id: string;
+  seller_id: string;
+  status: "DRAFT" | "ACTIVE" | "LOCKED" | "SOLD";
 };
 
 export async function startCheckoutAction(formData: FormData) {
@@ -81,6 +88,11 @@ export async function startCheckoutAction(formData: FormData) {
 
   const lockRow = (lockResult?.[0] ?? null) as CheckoutLockResult | null;
   if (lockError || !lockRow) {
+    logError({
+      event: "listing_checkout_lock_failed",
+      message: lockError?.message ?? "rpc failed",
+      context: { listingId, userId: user.id },
+    });
     redirect(`/listing/${listingId}?error=listing_lock_failed`);
   }
 
@@ -110,12 +122,31 @@ export async function startCheckoutAction(formData: FormData) {
       p_transaction_id: transactionId,
       p_session_id: session.id,
     });
+    logInfo({
+      event: "listing_checkout_session_created",
+      context: { listingId, transactionId, sessionId: session.id, userId: user.id },
+    });
 
     redirect(session.url);
-  } catch {
+  } catch (error) {
     await supabase.rpc("cancel_pending_transaction_and_unlock_listing", {
       p_transaction_id: transactionId,
     });
+
+    const message = error instanceof Error ? error.message : "unknown";
+    logError({
+      event: "listing_checkout_stripe_exception",
+      message,
+      context: { listingId, transactionId, userId: user.id },
+    });
+
+    if (message.includes("Missing required environment variable: STRIPE_SECRET_KEY")) {
+      redirect(`/listing/${listingId}?error=stripe_secret_missing`);
+    }
+    if (message.includes("Invalid URL") || message.includes("url")) {
+      redirect(`/listing/${listingId}?error=site_url_invalid`);
+    }
+
     redirect(`/listing/${listingId}?error=stripe_session_exception`);
   }
 }
@@ -174,4 +205,87 @@ export async function submitOfferAction(
     status: "success",
     message: "Offre envoyee. Elle expirera dans 24h sans reponse.",
   };
+}
+
+export async function updateListingPriceAction(formData: FormData) {
+  const listingId = String(formData.get("listing_id") ?? "").trim();
+  const priceSeller = Number(formData.get("price_seller") ?? 0);
+
+  if (!listingId) {
+    redirect("/");
+  }
+  if (!Number.isFinite(priceSeller) || priceSeller <= 0) {
+    redirect(`/listing/${listingId}?error=invalid_price&edit=1`);
+  }
+
+  const { supabase, user } = await requireAuthenticatedUser(`/listing/${listingId}`);
+  const { data: listing } = await supabase
+    .from("listings")
+    .select("id, seller_id, status")
+    .eq("id", listingId)
+    .maybeSingle<SellerListingManageRow>();
+
+  if (!listing) {
+    redirect("/?error=listing_not_found");
+  }
+  if (listing.seller_id !== user.id) {
+    redirect(`/listing/${listingId}?error=forbidden`);
+  }
+  if (!["ACTIVE", "DRAFT"].includes(listing.status)) {
+    redirect(`/listing/${listingId}?error=listing_not_editable`);
+  }
+
+  const { error } = await supabase
+    .from("listings")
+    .update({ price_seller: Math.round(priceSeller * 100) / 100 })
+    .eq("id", listingId)
+    .eq("seller_id", user.id);
+
+  if (error) {
+    redirect(`/listing/${listingId}?error=update_failed&edit=1`);
+  }
+
+  revalidatePath(`/listing/${listingId}`);
+  revalidatePath("/");
+  revalidatePath("/profile/listings");
+  redirect(`/listing/${listingId}?saved=1`);
+}
+
+export async function deleteListingAction(formData: FormData) {
+  const listingId = String(formData.get("listing_id") ?? "").trim();
+  if (!listingId) {
+    redirect("/");
+  }
+
+  const { supabase, user } = await requireAuthenticatedUser(`/listing/${listingId}`);
+  const { data: listing } = await supabase
+    .from("listings")
+    .select("id, seller_id, status")
+    .eq("id", listingId)
+    .maybeSingle<SellerListingManageRow>();
+
+  if (!listing) {
+    redirect("/?error=listing_not_found");
+  }
+  if (listing.seller_id !== user.id) {
+    redirect(`/listing/${listingId}?error=forbidden`);
+  }
+  if (listing.status === "LOCKED" || listing.status === "SOLD") {
+    redirect(`/listing/${listingId}?error=listing_not_deletable`);
+  }
+
+  const { error } = await supabase
+    .from("listings")
+    .update({ status: "DRAFT" })
+    .eq("id", listingId)
+    .eq("seller_id", user.id);
+
+  if (error) {
+    redirect(`/listing/${listingId}?error=delete_failed`);
+  }
+
+  revalidatePath(`/listing/${listingId}`);
+  revalidatePath("/");
+  revalidatePath("/profile/listings");
+  redirect("/profile/listings");
 }

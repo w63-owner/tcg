@@ -87,16 +87,9 @@ export function SavedSearchItem({
       <div className="min-w-0 space-y-1">
         <p className="line-clamp-1 text-sm font-medium">{title}</p>
         {criteria.length > 0 ? (
-          <div className="flex flex-wrap gap-1.5">
-            {criteria.map((criterion) => (
-              <span
-                key={criterion}
-                className="bg-muted text-muted-foreground rounded-full border px-2 py-0.5 text-[10px]"
-              >
-                {criterion}
-              </span>
-            ))}
-          </div>
+          <p className="text-muted-foreground line-clamp-2 text-xs">
+            {criteria.join(" · ")}
+          </p>
         ) : (
           <p className="text-muted-foreground text-xs">Aucun critere additionnel.</p>
         )}

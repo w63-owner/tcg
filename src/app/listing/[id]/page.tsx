@@ -6,7 +6,8 @@ import { createClient } from "@/lib/supabase/server";
 import { ListingImageCarousel } from "@/components/listing/listing-image-carousel";
 import { ListingMediaActions } from "@/components/listing/listing-media-actions";
 import { PriceHistoryCard } from "@/components/listing/price-history-card";
-import { startCheckoutAction } from "./actions";
+import { deleteListingAction, startCheckoutAction, updateListingPriceAction } from "./actions";
+import { ListingErrorToast } from "./listing-error-toast";
 import { createConversationForListingAction } from "@/app/messages/actions";
 import { calculateDisplayPrice } from "@/lib/pricing";
 import { formatConditionLabel } from "@/lib/listings/condition-label";
@@ -143,7 +144,13 @@ function formatConditionUserLabel(value?: string | null) {
 
 type ListingPageProps = {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ error?: string; checkout?: string; from?: string }>;
+  searchParams: Promise<{
+    error?: string;
+    checkout?: string;
+    from?: string;
+    edit?: string;
+    saved?: string;
+  }>;
 };
 
 export default async function ListingPage({
@@ -233,9 +240,12 @@ export default async function ListingPage({
   const canBuy = listing.status === "ACTIVE" && user && user.id !== listing.seller_id;
   const isSeller = Boolean(user && user.id === listing.seller_id);
   const showMobileStickyActions = listing.status === "ACTIVE" && !isSeller;
+  const showMobileStickySellerActions = isSeller && ["ACTIVE", "DRAFT"].includes(listing.status);
+  const isEditMode = query.edit === "1" && isSeller;
 
   return (
     <div className="space-y-4">
+      <ListingErrorToast errorCode={query.error} />
       <section className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-3 lg:col-span-2">
           <div className="flex items-center justify-between gap-2">
@@ -267,6 +277,32 @@ export default async function ListingPage({
         </div>
 
         <aside className="h-fit space-y-4 lg:sticky lg:top-20">
+          {isEditMode ? (
+            <section className="space-y-2 rounded-md border p-3">
+              <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+                Modifier l'annonce
+              </p>
+              <form action={updateListingPriceAction} className="space-y-2">
+                <input type="hidden" name="listing_id" value={listing.id} />
+                <label className="space-y-1">
+                  <span className="text-muted-foreground block text-xs">Prix net vendeur (EUR)</span>
+                  <input
+                    name="price_seller"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    defaultValue={Number(listing.price_seller).toFixed(2)}
+                    className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm outline-none"
+                    required
+                  />
+                </label>
+                <Button type="submit" className="w-full">
+                  Enregistrer
+                </Button>
+              </form>
+            </section>
+          ) : null}
+
           <section className="space-y-3 border-b pb-4">
             <h1 className="text-2xl font-semibold tracking-tight">{listing.title}</h1>
             <div>
@@ -421,10 +457,8 @@ export default async function ListingPage({
               Paiement annule. Tu peux reessayer quand tu veux.
             </p>
           ) : null}
-          {query.error ? (
-            <p className="text-destructive text-sm">
-              Action impossible: {query.error}
-            </p>
+          {query.saved === "1" ? (
+            <p className="text-primary text-sm">Annonce mise a jour.</p>
           ) : null}
         </aside>
       </section>
@@ -459,6 +493,22 @@ export default async function ListingPage({
                 </Button>
               </>
             )}
+          </div>
+        </div>
+      ) : null}
+
+      {showMobileStickySellerActions ? (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 px-4 pt-2 pb-[max(0.75rem,var(--safe-area-bottom))] backdrop-blur md:hidden">
+          <div className="grid grid-cols-2 gap-2">
+            <Button asChild variant="secondary" className="h-12 w-full">
+              <Link href={`/listing/${listing.id}?edit=1`}>Modifier</Link>
+            </Button>
+            <form action={deleteListingAction}>
+              <input type="hidden" name="listing_id" value={listing.id} />
+              <Button type="submit" variant="destructive" className="h-12 w-full">
+                Supprimer
+              </Button>
+            </form>
           </div>
         </div>
       ) : null}

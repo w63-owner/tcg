@@ -31,5 +31,22 @@ export function getSupabasePublicEnv() {
 }
 
 export function getSiteUrl() {
-  return process.env.NEXT_PUBLIC_SITE_URL?.trim() || "http://localhost:3000";
+  const explicit = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  if (explicit) return explicit;
+
+  const vercelProduction = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
+  if (vercelProduction) {
+    return vercelProduction.startsWith("http")
+      ? vercelProduction
+      : `https://${vercelProduction}`;
+  }
+
+  const vercelPreview = process.env.VERCEL_URL?.trim();
+  if (vercelPreview) {
+    return vercelPreview.startsWith("http")
+      ? vercelPreview
+      : `https://${vercelPreview}`;
+  }
+
+  return "http://localhost:3000";
 }
