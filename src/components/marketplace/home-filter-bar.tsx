@@ -149,11 +149,13 @@ export function HomeFilterBar(props: HomeFilterBarProps) {
         <Button
           asChild
           variant="outline"
-          className="h-9 w-full justify-start px-3 text-sm font-normal shadow-none"
+          className="h-9 w-full justify-start border-transparent bg-primary/10 px-3 text-[clamp(11px,3.1vw,14px)] font-normal text-muted-foreground shadow-none hover:bg-primary/10 hover:text-muted-foreground"
         >
           <Link href={triggerHref} aria-label="Ouvrir la recherche et les filtres">
             <Search className="text-muted-foreground h-4 w-4 shrink-0" />
-            {props.query || "Nom de la carte, numero (ex : Dracaufeu 4/102)"}
+            <span className="block min-w-0 truncate">
+              {props.query || "Nom de la carte, numero (ex : Dracaufeu 4/102)"}
+            </span>
           </Link>
         </Button>
       </div>

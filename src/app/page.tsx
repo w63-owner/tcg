@@ -8,6 +8,7 @@ import { SaveSearchFloatingButton } from "@/components/marketplace/save-search-f
 import { InfiniteListingsFeed } from "@/components/marketplace/infinite-listings-feed";
 import { PullToRefresh } from "@/components/marketplace/pull-to-refresh";
 import { HomeAttributeFilters } from "@/components/marketplace/home-attribute-filters";
+import { MobileStickyHomeFilters } from "@/components/marketplace/mobile-sticky-home-filters";
 import { fetchListingsFeedPage, fetchSetOptions, parseFeedFilters } from "@/lib/listings/feed";
 
 type HomeProps = {
@@ -162,9 +163,10 @@ export default async function Home({ searchParams }: HomeProps) {
     <section className="space-y-4">
       <PullToRefresh />
       <header className="space-y-3">
-        <HomeFilterBar
+        <MobileStickyHomeFilters
           query={query}
           setFilter={setFilter}
+          rarity={rarity}
           condition={condition}
           isGraded={isGraded}
           gradeMin={gradeMin !== null ? String(gradeMin) : ""}
@@ -173,21 +175,37 @@ export default async function Home({ searchParams }: HomeProps) {
           priceMax={priceMax !== null ? String(priceMax) : ""}
           sort={sort}
           setOptions={setOptions}
+          hasAnyFilter={hasAnyFilter}
         />
-        <div className="space-y-2">
-          <HomeAttributeFilters
-            setOptions={setOptions}
-            setFilter={setFilter}
-            rarity={rarity}
-            condition={condition}
-            isGraded={isGraded}
-            sort={sort}
-          />
-          {hasAnyFilter ? (
-            <Link href="/" className="inline-flex text-xs underline">
-              Reset all filters
-            </Link>
-          ) : null}
+
+        <div className="hidden space-y-2 md:block">
+          <div className="space-y-2">
+            <HomeFilterBar
+              query={query}
+              setFilter={setFilter}
+              condition={condition}
+              isGraded={isGraded}
+              gradeMin={gradeMin !== null ? String(gradeMin) : ""}
+              gradeMax={gradeMax !== null ? String(gradeMax) : ""}
+              priceMin={priceMin !== null ? String(priceMin) : ""}
+              priceMax={priceMax !== null ? String(priceMax) : ""}
+              sort={sort}
+              setOptions={setOptions}
+            />
+            <HomeAttributeFilters
+              setOptions={setOptions}
+              setFilter={setFilter}
+              rarity={rarity}
+              condition={condition}
+              isGraded={isGraded}
+              sort={sort}
+            />
+            {hasAnyFilter ? (
+              <Link href="/" className="inline-flex text-xs underline">
+                Reset all filters
+              </Link>
+            ) : null}
+          </div>
         </div>
         {user ? (
           <form

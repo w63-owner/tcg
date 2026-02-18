@@ -14,7 +14,9 @@ type CardItemProps = {
   displayPrice?: number | null;
   condition?: string | null;
   isGraded: boolean;
+  gradingCompany?: string | null;
   gradeNote?: number | null;
+  language?: string | null;
   favoriteCount?: number;
   showFavoriteToggle?: boolean;
   initialFavorite?: boolean;
@@ -29,7 +31,9 @@ export function CardItem({
   displayPrice,
   condition,
   isGraded,
+  gradingCompany,
   gradeNote,
+  language,
   favoriteCount = 0,
   showFavoriteToggle = false,
   initialFavorite = false,
@@ -39,6 +43,11 @@ export function CardItem({
       ? displayPrice
       : calculateDisplayPrice(priceSeller);
   const listingHref = href ?? `/listing/${id}`;
+  const gradeBadge = isGraded
+    ? `${String(gradingCompany ?? "Graded").toUpperCase()}${gradeNote ? ` ${gradeNote}` : ""}`
+    : formatConditionLabel(condition) || "Raw";
+  const languageBadge = String(language ?? "").trim().toUpperCase();
+  const hasLanguageBadge = ["FR", "EN", "JP"].includes(languageBadge);
 
   return (
     <article className="group flex h-full flex-col overflow-hidden py-0 transition-transform duration-200 hover:-translate-y-0.5">
@@ -59,17 +68,17 @@ export function CardItem({
           )}
         </div>
       </Link>
-      <section className="space-y-1 px-2.5 pt-1 pb-2">
+      <section className="space-y-1 pt-1 pb-2">
         <Link href={listingHref} className="block truncate text-sm font-semibold">
           {title}
         </Link>
         <div className="flex flex-wrap gap-1">
           <Badge variant="secondary" className="text-[10px]">
-            {isGraded ? "Graded" : formatConditionLabel(condition) || "Raw"}
+            {gradeBadge}
           </Badge>
-          {isGraded && gradeNote ? (
+          {hasLanguageBadge ? (
             <Badge variant="outline" className="text-[10px]">
-              Note {gradeNote}
+              {languageBadge}
             </Badge>
           ) : null}
         </div>

@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatConditionLabel } from "@/lib/listings/condition-label";
 
@@ -20,6 +22,7 @@ type RecentSearchSummary = {
 };
 
 type MarketplaceSearchPageFormProps = {
+  backHref: string;
   query: string;
   setFilter: string;
   condition: string;
@@ -33,6 +36,7 @@ type MarketplaceSearchPageFormProps = {
 };
 
 export function MarketplaceSearchPageForm({
+  backHref,
   query,
   setFilter,
   condition,
@@ -183,17 +187,27 @@ export function MarketplaceSearchPageForm({
 
   return (
     <form action="/" className="space-y-4">
-      <Input
-        ref={queryRef}
-        name="q"
-        value={queryValue}
-        onChange={(event) => setQueryValue(event.target.value)}
-        placeholder="Rechercher une carte, un set, un vendeur..."
-      />
+      <div className="flex items-center gap-2">
+        <Button asChild variant="ghost" size="icon" className="-ml-2 h-9 w-9 shrink-0">
+          <Link href={backHref} aria-label="Retour au marketplace">
+            <ArrowLeft className="h-4 w-4" />
+          </Link>
+        </Button>
+        <Input
+          ref={queryRef}
+          name="q"
+          value={queryValue}
+          onChange={(event) => setQueryValue(event.target.value)}
+          placeholder="Rechercher une carte, un set, un vendeur..."
+          className="border-transparent bg-primary/10 text-[clamp(11px,3.1vw,14px)] text-muted-foreground shadow-none placeholder:text-muted-foreground focus-visible:border-primary/40 focus-visible:ring-primary/20"
+        />
+      </div>
 
       {showSavedSection ? (
         <div className="space-y-2">
-          <p className="text-sm font-medium">Mes recherches sauvegardees</p>
+          <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+            Mes recherches sauvegardees
+          </p>
           {filteredSavedSearches.length === 0 ? (
             <p className="text-muted-foreground text-xs">Aucune recherche sauvegardee.</p>
           ) : (
@@ -227,7 +241,9 @@ export function MarketplaceSearchPageForm({
 
       {showRecentSection ? (
         <div className="space-y-2">
-          <p className="text-sm font-medium">Mes recherches recentes</p>
+          <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+            Mes recherches recentes
+          </p>
           {filteredRecentSearches.length === 0 ? (
             <p className="text-muted-foreground text-xs">Aucune recherche recente.</p>
           ) : (
@@ -261,7 +277,9 @@ export function MarketplaceSearchPageForm({
 
       {showSuggestionsSection ? (
         <div className="space-y-2">
-          <p className="text-sm font-medium">Suggestions</p>
+          <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+            Suggestions
+          </p>
           {suggestions.length === 0 ? (
             <p className="text-muted-foreground text-xs">
               Essaie avec le set, la langue, l&apos;etat ou le numero (ex: 10/102).

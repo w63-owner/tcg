@@ -8,11 +8,16 @@ export type ListingFeedRow = {
   display_price: number | null;
   condition: string | null;
   is_graded: boolean;
+  grading_company: string | null;
   grade_note: number | null;
+  language: string | null;
   favorite_count: number;
 };
 
-type ListingFeedBaseRow = Omit<ListingFeedRow, "favorite_count">;
+type ListingFeedBaseRow = Omit<ListingFeedRow, "favorite_count" | "language"> & {
+  card_ref_id: string | null;
+  created_at: string;
+};
 
 export type FeedFilters = {
   q: string;
@@ -108,7 +113,7 @@ export async function fetchListingsFeedPage(params: {
   let request = supabase
     .from("listings")
     .select(
-      "id, title, cover_image_url, price_seller, display_price, condition, is_graded, grade_note, card_ref_id, created_at",
+      "id, title, cover_image_url, price_seller, display_price, condition, is_graded, grading_company, grade_note, card_ref_id, created_at",
     )
     .eq("status", "ACTIVE");
   let tieBreakAscending = false;
@@ -175,24 +180,44 @@ export async function fetchListingsFeedPage(params: {
   const rows = (data ?? []) as ListingFeedBaseRow[];
   const hasNextPage = rows.length > pageSize;
   const pageRows = rows.slice(0, pageSize);
+  const pageCardRefIds = Array.from(
+    new Set(pageRows.map((row) => row.card_ref_id).filter(Boolean) as string[]),
+  );
+  const languageByCardRefId = new Map<string, string | null>();
 
   const favoriteCountsByListingId = new Map<string, number>();
   if (pageRows.length > 0) {
-    const listingIds = pageRows.map((row) => row.id);
-    const { data: favoriteRows } = await supabase
-      .from("favorite_listings")
-      .select("listing_id")
-      .in("listing_id", listingIds);
+    const [favoriteResult, languageResult] = await Promise.all([
+      supabase
+        .from("favorite_listings")
+        .select("listing_id")
+        .in("listing_id", pageRows.map((row) => row.id)),
+      pageCardRefIds.length > 0
+        ? supabase.from("cards_ref").select("id, language").in("id", pageCardRefIds)
+        : Promise.resolve({ data: [] as Array<{ id: string; language: string | null }> }),
+    ]);
 
-    for (const row of favoriteRows ?? []) {
+    for (const row of favoriteResult.data ?? []) {
       const key = row.listing_id as string;
       favoriteCountsByListingId.set(key, (favoriteCountsByListingId.get(key) ?? 0) + 1);
+    }
+    for (const row of languageResult.data ?? []) {
+      languageByCardRefId.set(String(row.id), row.language ?? null);
     }
   }
 
   return {
     listings: pageRows.map((row) => ({
-      ...row,
+      id: row.id,
+      title: row.title,
+      cover_image_url: row.cover_image_url,
+      price_seller: row.price_seller,
+      display_price: row.display_price,
+      condition: row.condition,
+      is_graded: row.is_graded,
+      grading_company: row.grading_company,
+      grade_note: row.grade_note,
+      language: row.card_ref_id ? (languageByCardRefId.get(row.card_ref_id) ?? null) : null,
       favorite_count: favoriteCountsByListingId.get(row.id) ?? 0,
     })),
     hasNextPage,
