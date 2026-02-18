@@ -76,7 +76,7 @@ export function MobileStickyHomeFilters({
       </div>
 
       <div
-        className={`fixed inset-x-0 top-[64px] z-30 bg-background transition-transform duration-200 md:hidden ${
+        className={`fixed inset-x-0 top-[72px] z-30 bg-background transition-transform duration-200 md:hidden ${
           hiddenOnScrollDown ? "-translate-y-full" : "translate-y-0"
         }`}
       >
@@ -99,7 +99,7 @@ export function MobileStickyHomeFilters({
       </div>
       <div
         className={`transition-[height] duration-200 md:hidden ${
-          hiddenOnScrollDown ? "h-[36px]" : "h-[80px]"
+          hiddenOnScrollDown ? "h-[36px]" : "h-[112px]"
         }`}
       />
     </>

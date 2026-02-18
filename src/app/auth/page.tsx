@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { AuthForm } from "./auth-form";
-import { Button } from "@/components/ui/button";
 
 type AuthPageProps = {
   searchParams: Promise<{
@@ -35,9 +34,6 @@ export default async function AuthPage({ searchParams }: AuthPageProps) {
       <p className="text-muted-foreground text-center text-sm">
         En créant un compte, tu acceptes les conditions d’utilisation de la marketplace.
       </p>
-      <Button asChild variant="ghost" size="sm">
-        <Link href="/">Retour à l’accueil</Link>
-      </Button>
     </section>
   );
 }
