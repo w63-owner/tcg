@@ -199,7 +199,10 @@ export function SellForm() {
     return base;
   }, [cardSetValue]);
   const cardRarityOptions = useMemo(() => {
-    const base = [...RARITY_OPTIONS].map((value) => ({ value, label: value.replace(/_/g, " ") }));
+    const base: Array<{ value: string; label: string }> = [...RARITY_OPTIONS].map((value) => ({
+      value,
+      label: value.replace(/_/g, " "),
+    }));
     const current = cardRarityValue.trim().toUpperCase();
     if (current && !base.some((option) => option.value === current)) {
       base.unshift({ value: current, label: current.replace(/_/g, " ") });
