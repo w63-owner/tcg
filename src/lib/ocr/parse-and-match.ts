@@ -11,6 +11,10 @@ export type ParsedCardParameters = {
   vintageHint?: "1ST_EDITION" | "SHADOWLESS" | "UNLIMITED";
   regulationMark?: string;
   illustrator?: string;
+  copyrightText?: string;
+  copyrightYearStart?: number;
+  copyrightYearEnd?: number;
+  printer?: "WIZARDS_OF_THE_COAST" | "NINTENDO" | "UNKNOWN";
   estimatedCondition?: "MINT" | "NEAR_MINT" | "EXCELLENT" | "GOOD" | "LIGHT_PLAYED" | "PLAYED" | "POOR";
 };
 
@@ -62,6 +66,18 @@ function normalize(value: string) {
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase();
+}
+
+function normalizeForCopyright(value: string) {
+  return normalize(value)
+    .replace(/\bnintend0\b/g, "nintendo")
+    .replace(/\bv+izards\b/g, "wizards")
+    .replace(/\bwiz(?:z|2)ards\b/g, "wizards")
+    .replace(/\bwi[zr]ards\b/g, "wizards")
+    .replace(/\b20o0\b/g, "2000")
+    .replace(/\b2ooo\b/g, "2000")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function titleCase(value: string) {
@@ -138,16 +154,52 @@ function overlapScore(a: string[], b: string[]) {
 
 function extractRarity(text: string) {
   const raw = normalize(text);
-  if (/\b★★★\b|special illustration rare|\bsir\b/.test(raw)) return "SIR";
-  if (/\b★★\b|illustration rare|\bir\b/.test(raw)) return "IR";
-  if (/\bultra rare\b|\bur\b|vmax|gx|ex\b/.test(raw)) return "ULTRA_RARE";
-  if (/\bpromo\b|black star/.test(raw)) return "PROMO";
-  if (/\bradiant\b|\bradieux\b|\bk\b/.test(raw)) return "RADIANT";
-  if (/\bamazing rare\b|\ba\b/.test(raw)) return "AMAZING_RARE";
-  if (/\bholo\b|\bholograph/i.test(raw)) return "HOLO_RARE";
-  if (/\brare\b/.test(raw)) return "RARE";
-  if (/\buncommon\b|peu commune|losange/.test(raw)) return "UNCOMMON";
-  if (/\bcommon\b|commune|cercle/.test(raw)) return "COMMON";
+  const rawWithSymbols = String(text ?? "")
+    .normalize("NFKD")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+  const stars = Math.max(
+    ...Array.from(rawWithSymbols.matchAll(/★+/g)).map((match) => match[0]?.length ?? 0),
+    0,
+  );
+
+  // Special buckets first (high precision).
+  if (/\bpromo\b|black star promo/.test(raw)) return "PROMO";
+  if (/shiny vault|baby shiny|full art shiny/.test(raw)) return "SHINY_VAULT";
+  if (/shining\b|neo shining/.test(raw)) return "SHINING";
+  if (/amazing rare/.test(raw)) return "AMAZING_RARE";
+  if (/radiant|radieux/.test(raw)) return "RADIANT";
+  if (/rainbow rare|arc en ciel/.test(raw)) return "RAINBOW_RARE";
+  if (/special illustration rare|\bsir\b/.test(raw)) return "SIR";
+  if (/\billustration rare\b|\bir\b/.test(raw) && !/\bsir\b|special illustration rare/.test(raw)) {
+    return "IR";
+  }
+  if (/hyper rare|triple rare/.test(raw)) return "HYPER_RARE";
+  if (/secret rare|secrete|gold rare/.test(raw)) return "SECRET_RARE";
+  if (/double rare|\brr\b/.test(raw)) return "DOUBLE_RARE";
+
+  // Symbol-aware fallbacks.
+  if (stars >= 3 && /(gold|dore|hyper|ur)/.test(raw)) return "HYPER_RARE";
+  if (stars >= 2 && /(special illustration|sir|gold|dore)/.test(raw)) return "SIR";
+  if (stars >= 2 && /(illustration rare|\bir\b)/.test(raw)) return "IR";
+  if (stars >= 2 && /(double rare|\brr\b|ex\b|carte ex\b)/.test(raw)) return "DOUBLE_RARE";
+
+  // Legacy + modern broad families.
+  if (
+    /\bultra rare\b|\bfull art\b|\balt(?:ernate)? art\b|\bsr\b|\bur\b|vmax|\bgx\b|\bex\b|\bex card\b/.test(
+      raw,
+    )
+  ) {
+    return "ULTRA_RARE";
+  }
+  if (/\bholo\b|holograph|holo rare/.test(raw)) return "HOLO_RARE";
+
+  // Base symbols and rarity words.
+  if (/♦/.test(rawWithSymbols) || /losange|peu commune|\buncommon\b/.test(raw)) return "UNCOMMON";
+  if (/●/.test(rawWithSymbols) || /cercle|\bcommon\b|\bcommune\b/.test(raw)) return "COMMON";
+  if (/★/.test(rawWithSymbols) || /etoile noire|\brare\b/.test(raw)) return "RARE";
+
   return undefined;
 }
 
@@ -180,6 +232,74 @@ function extractIllustrator(text: string) {
   return match || undefined;
 }
 
+function clampCopyrightYear(value: number | undefined) {
+  if (!value || !Number.isFinite(value)) return undefined;
+  if (value < 1995 || value > 2100) return undefined;
+  return value;
+}
+
+function extractCopyrightContext(rawText: string) {
+  const normalizedRaw = normalizeForCopyright(rawText);
+  const firstLineRaw = rawText
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => /(?:©|\(c\)|\bc\b).{0,120}(?:wizards(?:\s+of\s+the\s+coast)?|nintendo)/i.test(line));
+
+  const normalizedLine =
+    firstLineRaw && firstLineRaw.length > 0 ? normalizeForCopyright(firstLineRaw) : normalizedRaw;
+  const sourceForDate = normalizedLine || normalizedRaw;
+  const sourceForText = firstLineRaw || rawText;
+
+  const copyrightTextMatch =
+    sourceForText.match(
+      /(?:©|\(c\)|\bc\b)\s*(?:19\d{2}|20\d{2})(?:\s*[-–]\s*(?:19\d{2}|20\d{2}))?.{0,40}?(?:wizards(?:\s+of\s+the\s+coast)?|nintendo)/i,
+    ) ??
+    sourceForText.match(
+      /(?:19\d{2}|20\d{2})(?:\s*[-–]\s*(?:19\d{2}|20\d{2}))?.{0,40}?(?:wizards(?:\s+of\s+the\s+coast)?|nintendo)/i,
+    ) ??
+    sourceForText.match(/(?:©|\(c\)|\bc\b).{0,120}/i);
+
+  const copyrightText = copyrightTextMatch?.[0]
+    ? copyrightTextMatch[0].replace(/\s+/g, " ").trim()
+    : undefined;
+
+  let yearStart: number | undefined;
+  let yearEnd: number | undefined;
+  const yearRange = sourceForDate.match(/\b(19\d{2}|20\d{2})\s*[-–]\s*(19\d{2}|20\d{2})\b/i);
+  if (yearRange?.[1] && yearRange[2]) {
+    yearStart = clampCopyrightYear(Number(yearRange[1]));
+    yearEnd = clampCopyrightYear(Number(yearRange[2]));
+  } else {
+    const singles = Array.from(sourceForDate.matchAll(/\b(19\d{2}|20\d{2})\b/g));
+    if (singles[0]?.[1]) {
+      const single = clampCopyrightYear(Number(singles[0][1]));
+      yearStart = single;
+      yearEnd = single;
+    }
+  }
+  if (yearStart && yearEnd && yearEnd < yearStart) {
+    [yearStart, yearEnd] = [yearEnd, yearStart];
+  }
+
+  let printer: ParsedCardParameters["printer"] | undefined;
+  if (/\bwizards(?:\s+of\s+the\s+coast)?\b/i.test(normalizedLine)) {
+    printer = "WIZARDS_OF_THE_COAST";
+  } else if (/\bnintendo\b/i.test(normalizedLine)) {
+    printer = "NINTENDO";
+  } else if (/\bwizards(?:\s+of\s+the\s+coast)?\b/i.test(normalizedRaw)) {
+    printer = "WIZARDS_OF_THE_COAST";
+  } else if (/\bnintendo\b/i.test(normalizedRaw)) {
+    printer = "NINTENDO";
+  }
+
+  return {
+    copyrightText,
+    copyrightYearStart: yearStart,
+    copyrightYearEnd: yearEnd,
+    printer: printer ?? (copyrightText || yearStart || yearEnd ? "UNKNOWN" : undefined),
+  };
+}
+
 function estimateCondition(text: string): ParsedCardParameters["estimatedCondition"] {
   const raw = normalize(text);
   if (/\bmint\b|gem mint/.test(raw)) return "MINT";
@@ -193,6 +313,7 @@ function estimateCondition(text: string): ParsedCardParameters["estimatedConditi
 }
 
 export function parseCardParameters(rawText: string): ParsedCardParameters {
+  const copyright = extractCopyrightContext(rawText);
   const cardNumber = extractCardNumber(rawText);
   const [left, right] = cardNumber ? cardNumber.split("/").map((v) => Number(v)) : [];
   return {
@@ -211,6 +332,10 @@ export function parseCardParameters(rawText: string): ParsedCardParameters {
     vintageHint: extractVintageHint(rawText),
     regulationMark: extractRegulationMark(rawText),
     illustrator: extractIllustrator(rawText),
+    copyrightText: copyright.copyrightText,
+    copyrightYearStart: copyright.copyrightYearStart,
+    copyrightYearEnd: copyright.copyrightYearEnd,
+    printer: copyright.printer,
     estimatedCondition: estimateCondition(rawText),
   };
 }

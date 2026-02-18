@@ -66,7 +66,7 @@ export async function detectCardTextFromImage(file: File): Promise<OcrProviderRe
               {
                 type: "input_text",
                 text:
-                  "Extract visible Pokemon card information from this photo for strict catalog matching. Return plain text only and include if visible: name (with suffix like V/EX/GX/VMAX), HP/PV, collector number, set symbol/code, language (FR/EN/JP), rarity, finish (non-holo/holo/reverse/full art/textured/cosmos/cracked ice), regulation mark, promo markers, vintage markers (1st edition/shadowless/unlimited), illustrator, and simple condition hints.",
+                  "Extract visible Pokemon card information from this photo for strict catalog matching. Return plain text only and include if visible: name (with suffix like V/EX/GX/VMAX), HP/PV, collector number, set symbol/code, language (FR/EN/JP), rarity, rarity symbol details (circle/diamond/star, star count, black/silver/gold/rainbow if visible), finish (non-holo/holo/reverse/full art/textured/cosmos/cracked ice), regulation mark, promo markers, vintage markers (1st edition/shadowless/unlimited), illustrator, and simple condition hints.",
               },
               {
                 type: "input_image",
