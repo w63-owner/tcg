@@ -76,7 +76,7 @@ export function SavedSearchItem({
           onOpenSearch();
         }
       }}
-      className="relative space-y-3 rounded-md border p-3 transition-colors hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="relative space-y-3 py-3 transition-colors hover:bg-accent/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       {newMatchesCount > 0 ? (
         <span className="bg-primary text-primary-foreground absolute top-2 right-2 inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold">

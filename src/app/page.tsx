@@ -227,7 +227,7 @@ export default async function Home({ searchParams }: HomeProps) {
         ) : null}
       </header>
 
-      <h2 className="text-base font-semibold">Nouveautes</h2>
+      <h2 className="text-base font-semibold">Nouveautés</h2>
 
       {error ? (
         <div className="border-destructive/40 bg-destructive/10 rounded-md border p-3 text-sm">

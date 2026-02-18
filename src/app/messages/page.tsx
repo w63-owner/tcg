@@ -147,7 +147,7 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
           Aucun message pour le moment.
         </p>
       ) : (
-        <div className="space-y-2">
+        <div className="divide-border/60 divide-y">
           {conversationsWithMessages.map((conversation) => (
             (() => {
               const listing = pickOne(conversation.listing);
@@ -155,9 +155,9 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
                 <Link
                   key={conversation.id}
                   href={`/messages/${conversation.id}`}
-                  className={`flex items-start gap-3 rounded-md border p-3 transition-colors ${
+                  className={`flex items-start gap-3 py-3 transition-colors ${
                     conversation.unreadCount > 0
-                      ? "border-primary/40 bg-primary/5 hover:bg-primary/10"
+                      ? "bg-primary/10 hover:bg-primary/15"
                       : "hover:bg-muted/40"
                   }`}
                 >

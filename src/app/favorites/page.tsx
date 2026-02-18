@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import { Heart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -254,7 +255,7 @@ export default async function FavoritesPage() {
                 Tu n&apos;as pas encore ajoute d&apos;annonce en favoris.
               </p>
             ) : (
-              <div className="space-y-3">
+              <div className="divide-border/60 divide-y">
                 {favoriteListings.map((row) => (
                   (() => {
                     const listing = pickOne<ListingPreview>(row.listing);
@@ -262,9 +263,12 @@ export default async function FavoritesPage() {
                     return (
                       <div
                         key={row.listing_id}
-                        className="flex items-center justify-between gap-3 rounded-md border p-3"
+                        className="flex items-center justify-between gap-3 py-3"
                       >
-                        <div className="flex min-w-0 items-center gap-3">
+                        <Link
+                          href={`/listing/${row.listing_id}`}
+                          className="flex min-w-0 items-start gap-3"
+                        >
                           <div className="bg-muted relative h-14 w-12 shrink-0 overflow-hidden rounded-sm border">
                             {listing?.cover_image_url ? (
                               <Image
@@ -281,22 +285,25 @@ export default async function FavoritesPage() {
                             )}
                           </div>
                           <div className="min-w-0">
-                            <Link
-                              href={`/listing/${row.listing_id}`}
-                              className="line-clamp-1 text-sm font-medium hover:underline"
-                            >
+                            <p className="line-clamp-1 text-sm font-medium hover:underline">
                               {listing?.title ?? "Annonce"}
-                            </Link>
+                            </p>
                             <p className="text-muted-foreground text-xs">
-                              {listing?.display_price?.toFixed(2) ?? "--.--"} EUR ·{" "}
+                              {listing?.display_price?.toFixed(2) ?? "--.--"} € ·{" "}
                               {listing?.status ?? "UNKNOWN"}
                             </p>
                           </div>
-                        </div>
+                        </Link>
                         <form action={removeFavoriteListing}>
                           <input type="hidden" name="listing_id" value={row.listing_id} />
-                          <Button size="sm" variant="outline" type="submit">
-                            Retirer
+                          <Button
+                            variant="secondary"
+                            type="submit"
+                            aria-label="Retirer des favoris"
+                            title="Retirer des favoris"
+                            className="h-8 min-w-12 gap-1 rounded-full px-2 text-xs transition-all duration-200 border-primary/40 bg-primary/10 text-primary hover:bg-primary/15"
+                          >
+                            <Heart className="h-4 w-4 fill-current" />
                           </Button>
                         </form>
                       </div>
@@ -319,18 +326,20 @@ export default async function FavoritesPage() {
                 Tu n&apos;as pas encore sauvegarde de recherche.
               </p>
             ) : (
-              savedSearchesWithMeta.map((row) => (
-                <SavedSearchItem
-                  key={row.id}
-                  id={row.id}
-                  title={row.displayTitle}
-                  createdAt={row.created_at}
-                  criteria={row.criteria}
-                  newMatchesCount={row.newMatchesCount}
-                  relaunchHref={buildSearchHref(row.search_params)}
-                  editHref={buildSearchEditorHref(row.search_params, row.id)}
-                />
-              ))
+              <div className="divide-border/60 divide-y">
+                {savedSearchesWithMeta.map((row) => (
+                  <SavedSearchItem
+                    key={row.id}
+                    id={row.id}
+                    title={row.displayTitle}
+                    createdAt={row.created_at}
+                    criteria={row.criteria}
+                    newMatchesCount={row.newMatchesCount}
+                    relaunchHref={buildSearchHref(row.search_params)}
+                    editHref={buildSearchEditorHref(row.search_params, row.id)}
+                  />
+                ))}
+              </div>
             )}
           </div>
         </TabsContent>

@@ -82,9 +82,9 @@ export function CardItem({
             </Badge>
           ) : null}
         </div>
-        <div className="flex items-end justify-between gap-2 border-t pt-1.5">
+        <div className="flex items-center justify-between gap-2 border-t pt-1.5">
           <p className="text-sm font-normal tracking-tight">
-            {finalDisplayPrice.toFixed(2)} EUR
+            {finalDisplayPrice.toFixed(2)} €
           </p>
           <div className="flex items-center gap-1.5">
             {showFavoriteToggle ? (

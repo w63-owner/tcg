@@ -88,6 +88,7 @@ export function MobileStickyHomeFilters({
             condition={condition}
             isGraded={isGraded}
             sort={sort}
+            compact
           />
           {hasAnyFilter ? (
             <Link href="/" className="inline-flex text-xs underline">

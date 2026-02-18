@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowLeft, Camera } from "lucide-react";
+import { ArrowLeft, Camera, CheckCircle2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import { Input } from "@/components/ui/input";
@@ -35,6 +35,24 @@ const CONDITIONS = [
 
 const GRADING_COMPANIES = ["PSA", "PCA", "BGS", "CGC", "SGC", "ACE", "OTHER"] as const;
 const WEIGHT_CLASSES = ["XS", "S", "M", "L", "XL"] as const;
+const RARITY_OPTIONS = [
+  "COMMON",
+  "UNCOMMON",
+  "RARE",
+  "HOLO",
+  "ULTRA_RARE",
+  "SECRET_RARE",
+  "PROMO",
+] as const;
+const FINISH_OPTIONS = [
+  { value: "NON_HOLO", label: "Non holo" },
+  { value: "HOLO", label: "Holo" },
+  { value: "REVERSE_HOLO", label: "Reverse holo" },
+  { value: "FULL_ART", label: "Full art" },
+  { value: "TEXTURED", label: "Texturee" },
+  { value: "COSMOS", label: "Cosmos" },
+  { value: "CRACKED_ICE", label: "Cracked ice" },
+] as const;
 
 const SET_CODE_LABELS: Record<string, string> = {
   BASE1: "Set de Base",
@@ -44,6 +62,10 @@ const SET_CODE_LABELS: Record<string, string> = {
   BASE5: "Team Rocket",
   BASEP: "Promos Set de Base",
 };
+
+const FORM_LABEL_CLASS = "text-muted-foreground text-xs";
+const FORM_INPUT_CLASS =
+  "border-0 border-b border-border bg-transparent px-0 shadow-none rounded-none text-sm focus-visible:ring-0 focus-visible:border-b focus-visible:border-ring";
 
 function formatSetLabel(setValue?: string) {
   const raw = String(setValue ?? "").trim();
@@ -159,8 +181,31 @@ export function SellForm() {
     [gradeValue],
   );
   const previewPrice = Number(priceValue || 0);
+  const effectiveTitleValue = cardNameValue.trim() || titleValue.trim();
   const previewDisplayPrice =
     previewPrice > 0 ? Math.round((previewPrice * 1.05 + 0.7) * 100) / 100 : 0;
+  const cardSetOptions = useMemo(() => {
+    const base = Object.keys(SET_CODE_LABELS).map((code) => ({
+      value: code,
+      label: formatSetLabel(code),
+    }));
+    const current = cardSetValue.trim();
+    if (
+      current &&
+      !base.some((option) => option.value.toLowerCase() === current.toLowerCase())
+    ) {
+      base.unshift({ value: current, label: formatSetLabel(current) });
+    }
+    return base;
+  }, [cardSetValue]);
+  const cardRarityOptions = useMemo(() => {
+    const base = [...RARITY_OPTIONS].map((value) => ({ value, label: value.replace(/_/g, " ") }));
+    const current = cardRarityValue.trim().toUpperCase();
+    if (current && !base.some((option) => option.value === current)) {
+      base.unshift({ value: current, label: current.replace(/_/g, " ") });
+    }
+    return base;
+  }, [cardRarityValue]);
   const selectedOcrCandidate = useMemo(
     () => ocrCandidates.find((candidate) => candidate.cardRefId === ocrSelectedCardRefId) ?? null,
     [ocrCandidates, ocrSelectedCardRefId],
@@ -460,7 +505,7 @@ export function SellForm() {
         ? hasResolvedMatchDecision &&
           (matchDecision === "unmatched" || Boolean(selectedOcrCandidate))
         : step === 3
-          ? titleValue.trim().length >= 3 &&
+          ? effectiveTitleValue.length >= 3 &&
             Number.isFinite(previewPrice) &&
             previewPrice > 0
           : true;
@@ -483,27 +528,36 @@ export function SellForm() {
           ) : null}
           <h1 className="text-2xl font-semibold">Creation d&apos;annonce</h1>
         </div>
-        <ol className="hide-scrollbar flex items-center gap-2 overflow-x-auto pb-1">
+        <ol className="hide-scrollbar flex items-start justify-center gap-1 overflow-x-auto pb-1">
           {steps.map((item) => {
             const active = step === item.number;
             const done = step > item.number;
             return (
-              <li key={item.number} className="flex items-center gap-2 text-xs">
-                <span
-                  className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${
-                    done
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : active
-                        ? "border-primary text-primary"
-                        : "text-muted-foreground border-border"
-                  }`}
-                >
-                  {item.number}
-                </span>
-                <span className={active ? "font-medium" : "text-muted-foreground"}>
-                  {item.label}
-                </span>
-                {item.number < 4 ? <span className="text-muted-foreground">-</span> : null}
+              <li key={item.number} className="flex items-start">
+                <div className="flex min-w-16 flex-col items-center gap-1 text-xs">
+                  <span
+                    className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${
+                      done
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : active
+                          ? "border-primary text-primary"
+                          : "text-muted-foreground border-border"
+                    }`}
+                  >
+                    {item.number}
+                  </span>
+                  <span className={active ? "font-medium" : "text-muted-foreground"}>
+                    {item.label}
+                  </span>
+                </div>
+                {item.number < steps.length ? (
+                  <span
+                    className={`mt-3 mx-1 h-px w-5 ${
+                      step > item.number ? "bg-primary/70" : "bg-border"
+                    }`}
+                    aria-hidden="true"
+                  />
+                ) : null}
               </li>
             );
           })}
@@ -524,7 +578,7 @@ export function SellForm() {
           }}
         >
           <input type="hidden" name="is_graded" value={isGraded ? "on" : ""} />
-          <input type="hidden" name="title" value={titleValue} />
+          <input type="hidden" name="title" value={effectiveTitleValue} />
           <input type="hidden" name="price_seller" value={priceValue} />
           <input type="hidden" name="condition" value={conditionValue} />
           <input type="hidden" name="grading_company" value={gradingCompanyValue} />
@@ -575,7 +629,7 @@ export function SellForm() {
                   <p className="text-destructive text-xs">{ocrError}</p>
                 ) : null}
                 {isOcrLoading ? (
-                  <div className="h-[calc(100dvh-24rem)] min-h-[420px] space-y-2">
+                  <div className="h-[calc(100dvh-20rem)] min-h-[500px] space-y-2">
                     <div className="hide-scrollbar flex h-full snap-x gap-3 overflow-x-auto pb-1">
                       {[0, 1].map((idx) => (
                         <div
@@ -602,15 +656,15 @@ export function SellForm() {
                     </div>
                   </div>
                 ) : ocrCandidates.length > 0 ? (
-                  <div className="h-[calc(100dvh-24rem)] min-h-[420px] space-y-2">
+                  <div className="h-[calc(100dvh-20rem)] min-h-[500px] space-y-2">
                     <div className="hide-scrollbar flex h-full snap-x gap-3 overflow-x-auto pb-1">
                       {ocrCandidates.map((candidate) => (
                         <button
                           key={candidate.cardRefId}
                           type="button"
-                          className={`bg-background w-[min(85vw,360px)] shrink-0 snap-start overflow-hidden rounded-md border text-left transition ${
+                          className={`w-[min(85vw,360px)] h-full shrink-0 snap-start overflow-hidden rounded-md border text-left transition flex flex-col ${
                             ocrSelectedCardRefId === candidate.cardRefId
-                              ? "border-primary ring-primary/30 ring-2"
+                              ? "border-primary bg-primary/5 ring-primary/30 ring-2"
                               : "border-border"
                           }`}
                           onClick={() => {
@@ -633,10 +687,16 @@ export function SellForm() {
                             }
                           }}
                         >
-                          <div className="bg-muted relative aspect-[63/88] w-full">
+                          <div className="bg-muted relative h-40 w-full shrink-0">
                             <span className="bg-background/90 text-foreground absolute top-2 right-2 z-10 rounded-full px-2 py-0.5 text-[11px] font-medium">
                               {Math.round(candidate.score * 100)}% correspondance
                             </span>
+                            {ocrSelectedCardRefId === candidate.cardRefId ? (
+                              <span className="bg-primary/90 text-primary-foreground absolute top-2 left-2 z-10 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium">
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                Selectionnee
+                              </span>
+                            ) : null}
                             {candidate.imageUrl ? (
                               <Image
                                 src={candidate.imageUrl}
@@ -647,30 +707,65 @@ export function SellForm() {
                               />
                             ) : null}
                           </div>
-                          <div className="space-y-1 p-3 text-xs">
-                            <p className="line-clamp-2 text-sm font-semibold">{candidate.name}</p>
-                            <p className="text-muted-foreground truncate">
-                              {formatSetLabel(candidate.set)} · {candidate.cardNumber || "-"}
-                            </p>
-                            <div className="text-muted-foreground mt-2 grid grid-cols-2 gap-1 border-t pt-2">
-                              <span>Langue: {candidate.language ? candidate.language.toUpperCase() : "-"}</span>
-                              <span>HP: {candidate.hp ?? "-"}</span>
-                              <span>Rarete: {candidate.rarity || "-"}</span>
-                              <span>Finition: {candidate.finish || "-"}</span>
-                              <span>
-                                Etat estime:{" "}
-                                {candidate.estimatedCondition
-                                  ? formatConditionLabel(candidate.estimatedCondition)
-                                  : "-"}
-                              </span>
-                              <span>Annee: {candidate.releaseYear ?? "-"}</span>
-                              <span>Secret: {candidate.isSecret === null ? "-" : candidate.isSecret ? "Oui" : "Non"}</span>
-                              <span>Promo: {candidate.isPromo === null ? "-" : candidate.isPromo ? "Oui" : "Non"}</span>
-                              <span>Vintage: {candidate.vintageHint || "-"}</span>
-                              <span>Regulation: {candidate.regulationMark || "-"}</span>
-                              <span className="col-span-2">Illustrateur: {candidate.illustrator || "-"}</span>
-                              <span className="col-span-2">Ref: {candidate.tcgId || candidate.cardRefId}</span>
-                            </div>
+                          <div className="flex-1 space-y-3 overflow-y-auto p-3">
+                            <h3 className="line-clamp-2 text-lg font-semibold tracking-tight">
+                              {candidate.name}
+                            </h3>
+
+                            <section className="space-y-2">
+                              <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+                                <div>
+                                  <p className="text-muted-foreground text-xs">Set</p>
+                                  <p className="text-sm">{formatSetLabel(candidate.set) || "-"}</p>
+                                </div>
+                                <div>
+                                  <p className="text-muted-foreground text-xs">Numero</p>
+                                  <p className="text-sm">{candidate.cardNumber || "-"}</p>
+                                </div>
+                                <div>
+                                  <p className="text-muted-foreground text-xs">Langue</p>
+                                  <p className="text-sm">
+                                    {candidate.language ? candidate.language.toUpperCase() : "-"}
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-muted-foreground text-xs">Rarete</p>
+                                  <p className="text-sm">{candidate.rarity || "-"}</p>
+                                </div>
+                                <div>
+                                  <p className="text-muted-foreground text-xs">Finition</p>
+                                  <p className="text-sm">{candidate.finish || "-"}</p>
+                                </div>
+                                <div>
+                                  <p className="text-muted-foreground text-xs">Annee</p>
+                                  <p className="text-sm">{candidate.releaseYear ?? "-"}</p>
+                                </div>
+                                <div>
+                                  <p className="text-muted-foreground text-xs">Secret</p>
+                                  <p className="text-sm">
+                                    {candidate.isSecret === null ? "-" : candidate.isSecret ? "Oui" : "Non"}
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-muted-foreground text-xs">Promo</p>
+                                  <p className="text-sm">
+                                    {candidate.isPromo === null ? "-" : candidate.isPromo ? "Oui" : "Non"}
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-muted-foreground text-xs">Vintage</p>
+                                  <p className="text-sm">{candidate.vintageHint || "-"}</p>
+                                </div>
+                                <div>
+                                  <p className="text-muted-foreground text-xs">Regulation</p>
+                                  <p className="text-sm">{candidate.regulationMark || "-"}</p>
+                                </div>
+                                <div className="col-span-2">
+                                  <p className="text-muted-foreground text-xs">Illustrateur</p>
+                                  <p className="text-sm">{candidate.illustrator || "-"}</p>
+                                </div>
+                              </div>
+                            </section>
                           </div>
                         </button>
                       ))}
@@ -688,56 +783,66 @@ export function SellForm() {
 
           {step === 3 ? (
             <div className="space-y-4">
-              <div className="space-y-2">
-                <div className="space-y-2">
-                  <Label htmlFor="title">Titre de l&apos;annonce</Label>
-                  <Input
-                    id="title"
-                    placeholder="Ex: Dracaufeu EX 151 FR"
-                    minLength={3}
-                    maxLength={140}
-                    required
-                    value={titleValue}
-                    onChange={(event) => setTitleValue(event.target.value)}
-                  />
-                </div>
+              <section className="space-y-3 border-b pb-4">
+                <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+                  Identification carte
+                </p>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="card_name">Nom de la carte</Label>
+                    <Label htmlFor="card_name" className={FORM_LABEL_CLASS}>
+                      Nom de la carte
+                    </Label>
                     <Input
                       id="card_name"
                       placeholder="Ex: Dracaufeu"
                       value={cardNameValue}
                       onChange={(event) => setCardNameValue(event.target.value)}
+                      className={FORM_INPUT_CLASS}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="card_set">Set / Extension</Label>
-                    <Input
-                      id="card_set"
-                      placeholder="Ex: Set de Base"
-                      value={cardSetValue}
-                      onChange={(event) => setCardSetValue(event.target.value)}
-                    />
+                    <Label htmlFor="card_set" className={FORM_LABEL_CLASS}>
+                      Set / Extension
+                    </Label>
+                    <Select
+                      value={cardSetValue || undefined}
+                      onValueChange={setCardSetValue}
+                    >
+                      <SelectTrigger id="card_set" className={`w-full ${FORM_INPUT_CLASS}`}>
+                        <SelectValue placeholder="Choisir un set" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {cardSetOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="card_number">Numero</Label>
+                    <Label htmlFor="card_number" className={FORM_LABEL_CLASS}>
+                      Numero
+                    </Label>
                     <Input
                       id="card_number"
                       placeholder="Ex: 10/102"
                       value={cardNumberValue}
                       onChange={(event) => setCardNumberValue(event.target.value)}
+                      className={FORM_INPUT_CLASS}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="card_language">Langue</Label>
+                    <Label htmlFor="card_language" className={FORM_LABEL_CLASS}>
+                      Langue
+                    </Label>
                     <Select
                       value={cardLanguageValue || undefined}
                       onValueChange={(value) =>
                         setCardLanguageValue(value as "" | "fr" | "en" | "jp")
                       }
                     >
-                      <SelectTrigger id="card_language" className="w-full">
+                      <SelectTrigger id="card_language" className={`w-full ${FORM_INPUT_CLASS}`}>
                         <SelectValue placeholder="Choisir une langue" />
                       </SelectTrigger>
                       <SelectContent>
@@ -748,7 +853,9 @@ export function SellForm() {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="card_hp">HP</Label>
+                    <Label htmlFor="card_hp" className={FORM_LABEL_CLASS}>
+                      HP
+                    </Label>
                     <Input
                       id="card_hp"
                       type="number"
@@ -756,30 +863,56 @@ export function SellForm() {
                       placeholder="Ex: 60"
                       value={cardHpValue}
                       onChange={(event) => setCardHpValue(event.target.value)}
+                      className={FORM_INPUT_CLASS}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="card_rarity">Rarete</Label>
-                    <Input
-                      id="card_rarity"
-                      placeholder="Ex: RARE / PROMO"
-                      value={cardRarityValue}
-                      onChange={(event) => setCardRarityValue(event.target.value)}
-                    />
+                    <Label htmlFor="card_rarity" className={FORM_LABEL_CLASS}>
+                      Rarete
+                    </Label>
+                    <Select
+                      value={cardRarityValue || undefined}
+                      onValueChange={setCardRarityValue}
+                    >
+                      <SelectTrigger id="card_rarity" className={`w-full ${FORM_INPUT_CLASS}`}>
+                        <SelectValue placeholder="Choisir une rarete" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {cardRarityOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2 md:col-span-2">
-                    <Label htmlFor="card_finish">Finition</Label>
-                    <Input
-                      id="card_finish"
-                      placeholder="Ex: HOLO / REVERSE_HOLO / FULL_ART"
-                      value={cardFinishValue}
-                      onChange={(event) => setCardFinishValue(event.target.value)}
-                    />
+                    <Label htmlFor="card_finish" className={FORM_LABEL_CLASS}>
+                      Finition
+                    </Label>
+                    <Select
+                      value={cardFinishValue || undefined}
+                      onValueChange={setCardFinishValue}
+                    >
+                      <SelectTrigger id="card_finish" className={`w-full ${FORM_INPUT_CLASS}`}>
+                        <SelectValue placeholder="Choisir une finition" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {FINISH_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
-              </div>
+              </section>
 
-              <div className="space-y-3">
+              <section className="space-y-3 border-b pb-4">
+                <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+                  Etat et gradation
+                </p>
                 <div className="flex items-center gap-2 text-sm font-medium">
                   <Checkbox
                     id="is_graded"
@@ -792,13 +925,15 @@ export function SellForm() {
                 {isGraded ? (
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <div className="space-y-2">
-                      <Label htmlFor="grading_company">Societe</Label>
+                      <Label htmlFor="grading_company" className={FORM_LABEL_CLASS}>
+                        Societe
+                      </Label>
                       <Select
                         value={gradingCompanyValue}
                         onValueChange={setGradingCompanyValue}
                         required={isGraded}
                       >
-                        <SelectTrigger id="grading_company" className="w-full">
+                        <SelectTrigger id="grading_company" className={`w-full ${FORM_INPUT_CLASS}`}>
                           <SelectValue placeholder="Choisir une societe" />
                         </SelectTrigger>
                         <SelectContent>
@@ -811,7 +946,9 @@ export function SellForm() {
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="grade_note">Note (1 a 10)</Label>
+                      <Label htmlFor="grade_note" className={FORM_LABEL_CLASS}>
+                        Note (1 a 10)
+                      </Label>
                       <Input
                         id="grade_note"
                         type="number"
@@ -821,6 +958,7 @@ export function SellForm() {
                         required={isGraded}
                         value={gradeValue}
                         onChange={(event) => setGradeValue(event.target.value)}
+                        className={FORM_INPUT_CLASS}
                       />
                       <p className="text-xs text-muted-foreground">
                         Etat calcule automatiquement:{" "}
@@ -830,13 +968,15 @@ export function SellForm() {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <Label htmlFor="condition">Etat</Label>
+                    <Label htmlFor="condition" className={FORM_LABEL_CLASS}>
+                      Etat
+                    </Label>
                     <Select
                       value={conditionValue}
                       onValueChange={setConditionValue}
                       required={!isGraded}
                     >
-                      <SelectTrigger id="condition" className="w-full">
+                      <SelectTrigger id="condition" className={`w-full ${FORM_INPUT_CLASS}`}>
                         <SelectValue placeholder="Choisir un etat" />
                       </SelectTrigger>
                       <SelectContent>
@@ -849,11 +989,17 @@ export function SellForm() {
                     </Select>
                   </div>
                 )}
-              </div>
+              </section>
 
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <section className="space-y-3">
+                <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+                  Prix et livraison
+                </p>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="price_seller">Prix net vendeur (EUR)</Label>
+                  <Label htmlFor="price_seller" className={FORM_LABEL_CLASS}>
+                    Prix net vendeur (EUR)
+                  </Label>
                   <Input
                     id="price_seller"
                     type="number"
@@ -863,18 +1009,21 @@ export function SellForm() {
                     required
                     value={priceValue}
                     onChange={(event) => setPriceValue(event.target.value)}
+                    className={FORM_INPUT_CLASS}
                   />
                   <p className="text-xs text-muted-foreground">
                     Prix estime affiche: {previewDisplayPrice.toFixed(2)} EUR (hors livraison).
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="delivery_weight_class">Classe de poids</Label>
+                  <Label htmlFor="delivery_weight_class" className={FORM_LABEL_CLASS}>
+                    Classe de poids
+                  </Label>
                   <Select
                     value={deliveryWeightClassValue}
                     onValueChange={setDeliveryWeightClassValue}
                   >
-                    <SelectTrigger id="delivery_weight_class" className="w-full">
+                    <SelectTrigger id="delivery_weight_class" className={`w-full ${FORM_INPUT_CLASS}`}>
                       <SelectValue placeholder="Choisir une classe" />
                     </SelectTrigger>
                     <SelectContent>
@@ -886,7 +1035,8 @@ export function SellForm() {
                     </SelectContent>
                   </Select>
                 </div>
-              </div>
+                </div>
+              </section>
             </div>
           ) : null}
 
@@ -1047,15 +1197,6 @@ export function SellForm() {
                 <div className="h-9 w-9" />
               </div>
 
-              <div className="pointer-events-none absolute top-16 right-4">
-                <div className="relative h-20 aspect-[63/88] rounded-sm border border-white/60 bg-white/20">
-                  <div className="absolute inset-1 rounded-sm border border-white/70" />
-                  <div className="absolute inset-x-0 bottom-1 text-center text-[9px] font-semibold">
-                    {cameraSide === "front" ? "RECTO" : "VERSO"}
-                  </div>
-                </div>
-              </div>
-
               <div className="absolute inset-x-0 bottom-0 space-y-2 bg-gradient-to-t from-black/85 via-black/55 to-transparent px-4 pb-[max(1rem,var(--safe-area-bottom))] pt-10">
                 {cameraError ? (
                   <p className="text-destructive text-xs">{cameraError}</p>
@@ -1082,7 +1223,7 @@ export function SellForm() {
                       size="icon"
                       className="h-16 w-16 rounded-full border-4 border-white bg-white/95 text-black hover:bg-white"
                     >
-                      <Camera className="h-7 w-7" />
+                      <Camera className="h-12 w-12" />
                     </Button>
                   </div>
                 )}
@@ -1120,7 +1261,7 @@ export function SellForm() {
 
                       <aside className="space-y-4">
                         <h3 className="text-2xl font-bold tracking-tight">
-                          {titleValue || "Titre a renseigner"}
+                          {effectiveTitleValue || "Titre a renseigner"}
                         </h3>
                         <div>
                           <p className="text-xl font-bold tracking-tight">
