@@ -89,15 +89,12 @@ export function PullToRefresh() {
       className="pointer-events-none fixed inset-x-0 z-[90] flex justify-center"
       style={{ top: Math.min(12 + pullDistance * 0.4, 48) }}
     >
-      <div className="bg-background/95 border-border/60 flex items-center gap-2 rounded-full border px-3 py-1.5 shadow-sm backdrop-blur">
+      <div className="bg-background/95 border-border/60 flex items-center justify-center rounded-full border p-2 shadow-sm backdrop-blur">
         <RefreshCcw
-          className={`h-4 w-4 ${
+          className={`h-5 w-5 ${
             isRefreshing ? "animate-spin" : ready ? "text-primary" : "text-muted-foreground"
           }`}
         />
-        <span className="text-xs">
-          {isRefreshing ? "Actualisation..." : ready ? "Relache pour actualiser" : "Tire pour actualiser"}
-        </span>
       </div>
     </div>
   );

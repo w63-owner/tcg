@@ -134,6 +134,7 @@ function mapGradeToCondition(grade: number) {
 
 export function SellForm() {
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
   const [step, setStep] = useState(1);
   const [isGraded, setIsGraded] = useState(false);
   const [gradeValue, setGradeValue] = useState("10");
@@ -169,6 +170,8 @@ export function SellForm() {
   const [isOcrLoading, setIsOcrLoading] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const frontPreviewUrlRef = useRef<string | null>(null);
+  const backPreviewUrlRef = useRef<string | null>(null);
   const frontInputRef = useRef<HTMLInputElement | null>(null);
   const backInputRef = useRef<HTMLInputElement | null>(null);
   const [state, formAction, isPending] = useActionState(
@@ -231,6 +234,10 @@ export function SellForm() {
   ] as const;
 
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
     if (step !== 1) return;
     let cancelled = false;
 
@@ -282,11 +289,19 @@ export function SellForm() {
   }, [capturedPreviewUrl]);
 
   useEffect(() => {
+    frontPreviewUrlRef.current = frontPreviewUrl;
+  }, [frontPreviewUrl]);
+
+  useEffect(() => {
+    backPreviewUrlRef.current = backPreviewUrl;
+  }, [backPreviewUrl]);
+
+  useEffect(() => {
     return () => {
-      if (frontPreviewUrl) URL.revokeObjectURL(frontPreviewUrl);
-      if (backPreviewUrl) URL.revokeObjectURL(backPreviewUrl);
+      if (frontPreviewUrlRef.current) URL.revokeObjectURL(frontPreviewUrlRef.current);
+      if (backPreviewUrlRef.current) URL.revokeObjectURL(backPreviewUrlRef.current);
     };
-  }, [frontPreviewUrl, backPreviewUrl]);
+  }, []);
 
   useEffect(() => {
     if (step !== 1) return;
@@ -722,7 +737,7 @@ export function SellForm() {
                                   <p className="text-sm">{formatSetLabel(candidate.set) || "-"}</p>
                                 </div>
                                 <div>
-                                  <p className="text-muted-foreground text-xs">Numero</p>
+                                  <p className="text-muted-foreground text-xs">Fraction</p>
                                   <p className="text-sm">{candidate.cardNumber || "-"}</p>
                                 </div>
                                 <div>
@@ -1153,7 +1168,7 @@ export function SellForm() {
           </div>
         ) : null}
       </div>
-      {step === 1 && typeof document !== "undefined"
+      {step === 1 && mounted
         ? createPortal(
             <div className="fixed inset-0 z-[100] bg-black text-white">
               {capturedPreviewUrl ? (
@@ -1235,7 +1250,7 @@ export function SellForm() {
             document.body,
           )
         : null}
-      {step === 4 && typeof document !== "undefined"
+      {step === 4 && mounted
         ? createPortal(
             <div className="fixed inset-0 z-[110] bg-background">
               <div className="mx-auto flex h-full w-full max-w-3xl flex-col px-4 pt-5 pb-[max(1rem,var(--safe-area-bottom))] md:px-6">
@@ -1257,7 +1272,7 @@ export function SellForm() {
                   <section className="space-y-4">
                     <div className="grid gap-4 lg:grid-cols-3">
                       <div className="space-y-3 lg:col-span-2">
-                        <div className="overflow-hidden rounded-md">
+                        <div className="mx-auto w-1/2 overflow-hidden rounded-md">
                           <ListingImageCarousel images={capturedPreviewImages} />
                         </div>
                       </div>
