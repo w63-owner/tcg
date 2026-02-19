@@ -1217,8 +1217,13 @@ export function SellForm() {
                 >
                   <ArrowLeft className="h-4 w-4" />
                 </Button>
-                <div className="rounded-md border border-white/30 bg-black/35 px-2 py-1 text-xs font-medium">
-                  {cameraSide === "front" ? "RECTO" : "VERSO"}
+                <div className="flex flex-col items-center gap-1.5">
+                  <p className="text-center text-xs text-white/90">
+                    Prenez en photo la carte que vous souhaitez vendre.
+                  </p>
+                  <div className="rounded-md border border-white/30 bg-black/35 px-2 py-1 text-xs font-medium">
+                    {cameraSide === "front" ? "RECTO" : "VERSO"}
+                  </div>
                 </div>
                 <div className="h-9 w-9" />
               </div>
