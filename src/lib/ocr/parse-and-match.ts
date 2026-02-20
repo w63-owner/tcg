@@ -1,6 +1,9 @@
 export type ParsedCardParameters = {
   name?: string;
   cardNumber?: string;
+  localId?: string;
+  printedTotal?: string;
+  inferredSetName?: string;
   set?: string;
   language?: string;
   hp?: number;
@@ -395,11 +398,15 @@ export function buildLookupTerms(parsed: ParsedCardParameters, rawText: string) 
       .forEach((token) => terms.add(token));
   }
 
-  const cardNumber = parsed.cardNumber?.split("/")[0];
+  const cardNumber = parsed.localId || parsed.cardNumber?.split("/")[0];
   if (cardNumber) terms.add(cardNumber);
 
-  if (parsed.set) {
-    tokenize(parsed.set).forEach((token) => terms.add(token));
+  if (parsed.printedTotal) {
+    terms.add(parsed.printedTotal);
+  }
+
+  if (parsed.inferredSetName || parsed.set) {
+    tokenize(parsed.inferredSetName || parsed.set || "").forEach((token) => terms.add(token));
   }
 
   if (terms.size < 2) {
@@ -421,8 +428,10 @@ export function rankCardRefCandidates(params: {
   const { parsed, rawText, rows, limit = 3, feedbackBoostByCardRefId = {} } = params;
   const normalizedRaw = normalize(rawText);
   const parsedNameTokens = tokenize(parsed.name ?? "");
-  const parsedSetTokens = tokenize(parsed.set ?? "");
+  const parsedSetTokens = tokenize(parsed.inferredSetName || parsed.set || "");
   const normalizedCardNumber = parsed.cardNumber ? normalize(parsed.cardNumber) : "";
+  const normalizedLocalId = parsed.localId ? normalize(parsed.localId) : "";
+  const normalizedPrintedTotal = parsed.printedTotal ? normalize(parsed.printedTotal) : "";
 
   const ranked = rows
     .map((row) => {
@@ -451,6 +460,17 @@ export function rankCardRefCandidates(params: {
         if (rowCardNumber.includes(normalizedCardNumber) || rowTcg.includes(normalizedCardNumber)) {
           score += 0.3;
         }
+      }
+      if (normalizedLocalId) {
+        if (rowCardNumber === normalizedLocalId || rowCardNumber.includes(normalizedLocalId)) {
+          score += 0.25;
+        }
+      }
+      if (normalizedPrintedTotal) {
+        const official = normalize(String(row.set?.cardCount?.official ?? ""));
+        const total = normalize(String(row.set?.cardCount?.total ?? ""));
+        if (official && official === normalizedPrintedTotal) score += 0.22;
+        if (total && total === normalizedPrintedTotal) score += 0.18;
       }
 
       if (normalizedRaw.includes(rowName) && rowName.length >= 4) {
@@ -511,7 +531,12 @@ export function rankCardRefCandidates(params: {
   const confidence = deduped.length > 0 ? deduped[0].score : 0;
   const strictCandidates = deduped.filter((candidate) => {
     if (!parsed.name) return false;
-    const hasSetOrNumber = Boolean(parsed.set) || Boolean(parsed.cardNumber);
+    const hasSetOrNumber =
+      Boolean(parsed.inferredSetName) ||
+      Boolean(parsed.set) ||
+      Boolean(parsed.localId) ||
+      Boolean(parsed.cardNumber) ||
+      Boolean(parsed.printedTotal);
     return hasSetOrNumber ? candidate.score >= 0.4 : candidate.score >= 0.55;
   });
 

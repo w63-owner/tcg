@@ -9,6 +9,7 @@ import {
   rankCardRefCandidates,
   type CardRefCandidate,
   type CardRefLookupRow,
+  type ParsedCardParameters,
 } from "@/lib/ocr/parse-and-match";
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
@@ -33,6 +34,48 @@ function toClientOcrErrorMessage(message: string) {
     return "OCR n'a detecte aucun texte exploitable.";
   }
   return "OCR processing failed";
+}
+
+function parseFromStructuredOutput(
+  structured: Awaited<ReturnType<typeof detectCardTextFromImage>>["structured"],
+): ParsedCardParameters | null {
+  if (!structured) return null;
+  const rarityMap: Record<string, string> = {
+    Common: "COMMON",
+    Uncommon: "UNCOMMON",
+    Rare: "RARE",
+    "Double Rare": "DOUBLE_RARE",
+    "Secret Rare": "SECRET_RARE",
+  };
+  const finishMap: Record<string, ParsedCardParameters["finish"]> = {
+    holo: "HOLO",
+    reverse: "REVERSE_HOLO",
+    normal: "NON_HOLO",
+  };
+  const vintageMap: Record<string, ParsedCardParameters["vintageHint"]> = {
+    "1st_edition": "1ST_EDITION",
+    shadowless: "SHADOWLESS",
+    unlimited: "UNLIMITED",
+  };
+  const localId = String(structured.localId ?? "").trim();
+  const printedTotal = String(structured.printedTotal ?? "").trim();
+  return {
+    name: structured.name ?? undefined,
+    cardNumber: localId && printedTotal ? `${localId}/${printedTotal}` : localId || undefined,
+    localId: localId || undefined,
+    printedTotal: printedTotal || undefined,
+    inferredSetName: structured.inferred_set_name ?? undefined,
+    set: structured.inferred_set_name ?? undefined,
+    language: structured.language ?? undefined,
+    hp: structured.hp ?? undefined,
+    rarity: structured.rarity ? rarityMap[structured.rarity] ?? undefined : undefined,
+    finish: structured.finish ? finishMap[structured.finish] ?? undefined : undefined,
+    isPromo: typeof structured.is_promo === "boolean" ? structured.is_promo : undefined,
+    isSecret: typeof structured.is_secret === "boolean" ? structured.is_secret : undefined,
+    vintageHint: structured.vintage_hint ? vintageMap[structured.vintage_hint] ?? undefined : undefined,
+    regulationMark: structured.regulationMark ?? undefined,
+    illustrator: structured.illustrator ?? undefined,
+  };
 }
 
 export async function POST(request: Request) {
@@ -64,31 +107,48 @@ export async function POST(request: Request) {
     }
 
     const ocrResult = await detectCardTextFromImage(image);
-    const parsed = parseCardParameters(ocrResult.rawText);
+    const parsed = parseFromStructuredOutput(ocrResult.structured) ?? parseCardParameters(ocrResult.rawText);
     const lookupTerms = buildLookupTerms(parsed, ocrResult.rawText)
       .map(sanitizeLookupToken)
       .filter(Boolean);
+    const strictName = String(parsed.name ?? "").trim();
+    const strictLocalId = String(parsed.localId ?? "").trim();
+    const strictPrintedTotal = String(parsed.printedTotal ?? "").trim();
+    const useStrictThreeKeyLookup = Boolean(strictName && strictLocalId);
+
+    const matchesPrintedTotal = (row: CardRefLookupRow) => {
+      if (!strictPrintedTotal) return true;
+      const official = String(row.set?.cardCount?.official ?? "").trim();
+      const total = String(row.set?.cardCount?.total ?? "").trim();
+      return official === strictPrintedTotal || total === strictPrintedTotal;
+    };
 
     let localRows: CardRefLookupRow[] = [];
     let fallbackRows: CardRefLookupRow[] = [];
     let feedbackBoostByCardRefId: Record<string, number> = {};
-    if (lookupTerms.length > 0) {
-      const orFilters = lookupTerms
-        .flatMap((term) => [
-          `name.ilike.%${term}%`,
-          `setId.ilike.%${term}%`,
-          `tcgId.ilike.%${term}%`,
-          `localId.ilike.%${term}%`,
-        ])
-        .join(",");
-
-      const { data: rows, error: lookupError } = await supabase
+    if (useStrictThreeKeyLookup || lookupTerms.length > 0) {
+      let lookupRequest = supabase
         .from("cards_ref")
         .select(
           "id, category, name, setId, set, variants, tcgId, localId, language, hp, rarity, finish, is_secret, is_promo, vintage_hint, regulationMark, illustrator, estimated_condition, releaseYear, image",
         )
-        .or(orFilters)
-        .limit(80);
+        .limit(120);
+
+      if (useStrictThreeKeyLookup) {
+        lookupRequest = lookupRequest.ilike("name", `%${strictName}%`).eq("localId", strictLocalId);
+      } else {
+        const orFilters = lookupTerms
+          .flatMap((term) => [
+            `name.ilike.%${term}%`,
+            `setId.ilike.%${term}%`,
+            `tcgId.ilike.%${term}%`,
+            `localId.ilike.%${term}%`,
+          ])
+          .join(",");
+        lookupRequest = lookupRequest.or(orFilters);
+      }
+
+      const { data: rows, error: lookupError } = await lookupRequest;
 
       if (lookupError) {
         logError({
@@ -97,7 +157,7 @@ export async function POST(request: Request) {
           context: { userId: user.id },
         });
       } else {
-        localRows = (rows ?? []) as CardRefLookupRow[];
+        localRows = ((rows ?? []) as CardRefLookupRow[]).filter(matchesPrintedTotal);
 
         if (localRows.length > 0) {
           const cardRefIds = localRows.map((row) => row.id);
