@@ -104,6 +104,8 @@ type OcrCandidate = {
     id?: string | null;
     logo?: string | null;
     name?: string | null;
+    series?: string | null;
+    seriesId?: string | null;
     symbol?: string | null;
   } | null;
   variants?: {
@@ -775,7 +777,7 @@ export function SellForm() {
                             }
                           }}
                         >
-                          <div className="bg-muted relative h-40 w-full shrink-0">
+                          <div className="bg-muted relative aspect-[63/88] w-2/3 shrink-0 self-center rounded-sm">
                             <span className="bg-background/90 text-foreground absolute top-2 right-2 z-10 rounded-full px-2 py-0.5 text-[11px] font-medium">
                               {Math.round(candidate.score * 100)}% correspondance
                             </span>
@@ -791,7 +793,7 @@ export function SellForm() {
                                 alt={candidate.name}
                                 fill
                                 unoptimized
-                                className="object-cover"
+                                className="object-contain"
                               />
                             ) : null}
                           </div>
@@ -803,13 +805,25 @@ export function SellForm() {
                             <section className="space-y-2">
                               <div className="grid grid-cols-2 gap-x-3 gap-y-2">
                                 <div>
-                                  <p className="text-muted-foreground text-xs">Set</p>
-                                  <p className="text-sm">{formatSetLabel(candidate.set) || "-"}</p>
+                                  <p className="text-muted-foreground text-xs">Bloc</p>
+                                  <p className="text-sm">
+                                    {candidate.setDetails?.name ||
+                                      formatSetLabel(candidate.set) ||
+                                      "-"}
+                                  </p>
                                 </div>
                                 <div>
                                   <p className="text-muted-foreground text-xs">Set number</p>
                                   <p className="text-sm">
                                     {resolveDisplayedSetNumber(candidate.cardNumber)}
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-muted-foreground text-xs">Serie</p>
+                                  <p className="text-sm">
+                                    {candidate.setDetails?.series ||
+                                      candidate.setDetails?.seriesId ||
+                                      "-"}
                                   </p>
                                 </div>
                                 <div>
@@ -823,32 +837,8 @@ export function SellForm() {
                                   <p className="text-sm">{candidate.rarity || "-"}</p>
                                 </div>
                                 <div>
-                                  <p className="text-muted-foreground text-xs">Finition</p>
+                                  <p className="text-muted-foreground text-xs">Version</p>
                                   <p className="text-sm">{candidate.finish || "-"}</p>
-                                </div>
-                                <div>
-                                  <p className="text-muted-foreground text-xs">Annee</p>
-                                  <p className="text-sm">{candidate.releaseYear ?? "-"}</p>
-                                </div>
-                                <div>
-                                  <p className="text-muted-foreground text-xs">Secret</p>
-                                  <p className="text-sm">
-                                    {candidate.isSecret === null ? "-" : candidate.isSecret ? "Oui" : "Non"}
-                                  </p>
-                                </div>
-                                <div>
-                                  <p className="text-muted-foreground text-xs">Promo</p>
-                                  <p className="text-sm">
-                                    {candidate.isPromo === null ? "-" : candidate.isPromo ? "Oui" : "Non"}
-                                  </p>
-                                </div>
-                                <div>
-                                  <p className="text-muted-foreground text-xs">Vintage</p>
-                                  <p className="text-sm">{candidate.vintageHint || "-"}</p>
-                                </div>
-                                <div>
-                                  <p className="text-muted-foreground text-xs">Regulation</p>
-                                  <p className="text-sm">{candidate.regulationMark || "-"}</p>
                                 </div>
                                 <div className="col-span-2">
                                   <p className="text-muted-foreground text-xs">Illustrateur</p>

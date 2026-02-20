@@ -1,3 +1,5 @@
+import { normalizeTcgdexAssetUrl } from "./tcgdex-assets.mjs";
+
 export const SOURCE_PRIORITY = {
   tcgdex: 95,
   pokemontcg: 90,
@@ -257,7 +259,9 @@ export function buildNormalizedCard({ source, externalId, rawCard }) {
     estimated_condition: toEstimatedCondition(rawCard),
     language,
     releaseYear: inferReleaseYear(rawCard),
-    image: normalizeWhitespace(rawCard?.images?.large || rawCard?.images?.small || rawCard?.image),
+    image: normalizeTcgdexAssetUrl(
+      normalizeWhitespace(rawCard?.images?.large || rawCard?.images?.small || rawCard?.image),
+    ),
     metadata: {
       source,
       external_id: externalId,

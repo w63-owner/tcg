@@ -1,4 +1,5 @@
 import type { CardRefLookupRow } from "@/lib/ocr/parse-and-match";
+import { normalizeTcgdexAssetUrl } from "@/lib/cards/tcgdex-assets";
 
 const TCGDEX_BASE_URL = "https://api.tcgdex.net/v2";
 const REQUEST_TIMEOUT_MS = 6000;
@@ -25,6 +26,10 @@ type TcgdexSetDetail = {
   logo?: string;
   symbol?: string;
   series?: string;
+  serie?: {
+    id?: string;
+    name?: string;
+  };
   cardCount?: {
     official?: number;
     total?: number;
@@ -185,7 +190,7 @@ function mapTcgdexCardToLookupRow(card: TcgdexCard, language: string): CardRefLo
     illustrator: card.illustrator ?? null,
     estimated_condition: null,
     releaseYear: parseReleaseYear(card.set?.releaseDate) ?? null,
-    image: card.image ?? null,
+    image: normalizeTcgdexAssetUrl(card.image),
   };
 }
 
@@ -250,6 +255,8 @@ export async function lookupTcgdexCandidates(input: LookupInput): Promise<CardRe
       const setKey = String(card.set?.id ?? "").trim();
       const setDetail = setKey ? setDetailById.get(setKey) : undefined;
       if (setDetail) {
+        const seriesName = setDetail.serie?.name ?? setDetail.series ?? null;
+        const seriesIdRaw = setDetail.serie?.id ?? null;
         mapped.set = {
           cardCount: {
             official: setDetail.cardCount?.official ?? mapped.set?.cardCount?.official ?? null,
@@ -258,8 +265,10 @@ export async function lookupTcgdexCandidates(input: LookupInput): Promise<CardRe
           id: setKey || mapped.set?.id || null,
           logo: setDetail.logo ?? mapped.set?.logo ?? null,
           name: setDetail.name ?? mapped.set?.name ?? null,
-          series: setDetail.series ?? null,
-          seriesId: setDetail.series ? setDetail.series.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-") : null,
+          series: seriesName,
+          seriesId:
+            seriesIdRaw ??
+            (seriesName ? seriesName.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-") : null),
           symbol: setDetail.symbol ?? mapped.set?.symbol ?? null,
         };
       }

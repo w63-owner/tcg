@@ -221,6 +221,26 @@ export async function POST(request: Request) {
       }
     }
 
+    const hasImage = (row: CardRefLookupRow) => Boolean(String(row.image ?? "").trim());
+    const mergeSetDetails = (localSet: CardRefLookupRow["set"], fallbackSet: CardRefLookupRow["set"]) => {
+      const left = localSet ?? null;
+      const right = fallbackSet ?? null;
+      if (!left) return right;
+      if (!right) return left;
+      return {
+        ...left,
+        cardCount: {
+          official: left.cardCount?.official ?? right.cardCount?.official ?? null,
+          total: left.cardCount?.total ?? right.cardCount?.total ?? null,
+        },
+        id: left.id ?? right.id ?? null,
+        logo: left.logo ?? right.logo ?? null,
+        name: left.name ?? right.name ?? null,
+        series: left.series ?? right.series ?? null,
+        seriesId: left.seriesId ?? right.seriesId ?? null,
+        symbol: left.symbol ?? right.symbol ?? null,
+      };
+    };
     const byKey = new Map<string, CardRefLookupRow>();
     for (const row of localRows) {
       const dedupeKey = String(row.tcgId ?? row.id);
@@ -228,7 +248,36 @@ export async function POST(request: Request) {
     }
     for (const row of fallbackRows) {
       const dedupeKey = String(row.tcgId ?? row.id);
-      if (!byKey.has(dedupeKey)) byKey.set(dedupeKey, row);
+      const existing = byKey.get(dedupeKey);
+      if (!existing) {
+        byKey.set(dedupeKey, row);
+        continue;
+      }
+
+      // Keep local UUID row identity, but enrich missing fields from fallback.
+      // Priority rule requested: prefer non-empty fallback image over local image.
+      const merged: CardRefLookupRow = {
+        ...existing,
+        name: existing.name || row.name,
+        setId: existing.setId || row.setId,
+        set: mergeSetDetails(existing.set, row.set),
+        variants: existing.variants ?? row.variants,
+        tcgId: existing.tcgId ?? row.tcgId,
+        localId: existing.localId ?? row.localId,
+        language: existing.language ?? row.language,
+        rarity: existing.rarity ?? row.rarity,
+        finish: existing.finish ?? row.finish,
+        hp: existing.hp ?? row.hp,
+        is_secret: existing.is_secret ?? row.is_secret,
+        is_promo: existing.is_promo ?? row.is_promo,
+        vintage_hint: existing.vintage_hint ?? row.vintage_hint,
+        regulationMark: existing.regulationMark ?? row.regulationMark,
+        illustrator: existing.illustrator ?? row.illustrator,
+        estimated_condition: existing.estimated_condition ?? row.estimated_condition,
+        releaseYear: existing.releaseYear ?? row.releaseYear,
+        image: hasImage(row) ? row.image : existing.image,
+      };
+      byKey.set(dedupeKey, merged);
     }
     const mergedRows = Array.from(byKey.values());
     const fallbackIdSet = new Set(fallbackRows.map((row) => row.id));
