@@ -32,6 +32,8 @@ export type CardRefCandidate = {
     id?: string | null;
     logo?: string | null;
     name?: string | null;
+    series?: string | null;
+    seriesId?: string | null;
     symbol?: string | null;
   } | null;
   variants?: {
@@ -71,6 +73,8 @@ export type CardRefLookupRow = {
     id?: string | null;
     logo?: string | null;
     name?: string | null;
+    series?: string | null;
+    seriesId?: string | null;
     symbol?: string | null;
   } | null;
   variants?: {
@@ -171,9 +175,15 @@ function extractName(text: string) {
   const blacklist = [/^\d+\/\d+$/, /^hp\s?\d+/i, /^pokemon$/i, /^trainer$/i, /^energy$/i];
   for (const line of lines) {
     if (blacklist.some((rule) => rule.test(line))) continue;
+    const jsonNameMatch = line.match(/^[{,\s]*"?name"?\s*:\s*"?([^",}]+)"?\s*,?\s*$/i)?.[1];
+    if (jsonNameMatch) {
+      const cleanedJsonName = jsonNameMatch.trim();
+      if (cleanedJsonName) return cleanedJsonName;
+    }
     const safe = line.replace(/\[[^\]]*]/g, "").trim();
     if (!safe) continue;
-    return safe;
+    const cleaned = safe.replace(/^"+|"+$/g, "").replace(/,\s*$/, "").trim();
+    if (cleaned) return cleaned;
   }
   return undefined;
 }

@@ -57,6 +57,12 @@ type ValidatedCandidatePayload = {
   image?: string | null;
 };
 
+type UpsertRefsInput = {
+  language: "fr" | "en" | "jp" | null;
+  setId: string;
+  setObject: Record<string, unknown> | null;
+};
+
 function parseValidatedCandidatePayload(value: FormDataEntryValue | null): ValidatedCandidatePayload | null {
   if (typeof value !== "string" || !value.trim()) return null;
   try {
@@ -65,6 +71,87 @@ function parseValidatedCandidatePayload(value: FormDataEntryValue | null): Valid
   } catch {
     return null;
   }
+}
+
+function toNullableText(value: unknown) {
+  const text = String(value ?? "").trim();
+  return text ? text : null;
+}
+
+function toNullableInt(value: unknown) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return null;
+  return Math.trunc(num);
+}
+
+function toSeriesIdFromName(name: string) {
+  return name
+    .normalize("NFKD")
+    .replace(/[^\p{L}\p{N}]+/gu, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .toLowerCase();
+}
+
+async function upsertSetAndSeriesRefs(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  input: UpsertRefsInput,
+) {
+  const setObj = input.setObject ?? {};
+  const seriesName = toNullableText((setObj as { series?: unknown }).series);
+  const seriesTcgdexId =
+    toNullableText((setObj as { seriesId?: unknown }).seriesId) ??
+    (seriesName ? toSeriesIdFromName(seriesName) : null);
+
+  let seriesRefId: string | null = null;
+  if (seriesName) {
+    const { data: seriesRow, error: seriesError } = await supabase
+      .from("series_ref")
+      .upsert(
+        {
+          tcgdex_id: seriesTcgdexId,
+          name: seriesName,
+          language: input.language,
+          metadata: {
+            source: "tcgdex_lazy_cache",
+          },
+        },
+        { onConflict: "tcgdex_id" },
+      )
+      .select("id")
+      .single();
+    if (seriesError) throw new Error(`series_ref upsert failed: ${seriesError.message}`);
+    seriesRefId = seriesRow.id;
+  }
+
+  const cardCount = (setObj as { cardCount?: { official?: unknown; total?: unknown } }).cardCount ?? {};
+  const { data: setRow, error: setError } = await supabase
+    .from("sets_ref")
+    .upsert(
+      {
+        tcgdex_id: input.setId.toLowerCase(),
+        name: toNullableText((setObj as { name?: unknown }).name) ?? input.setId,
+        language: input.language,
+        logo: toNullableText((setObj as { logo?: unknown }).logo),
+        symbol: toNullableText((setObj as { symbol?: unknown }).symbol),
+        official_count: toNullableInt(cardCount.official),
+        total_count: toNullableInt(cardCount.total),
+        series_ref_id: seriesRefId,
+        metadata: {
+          source: "tcgdex_lazy_cache",
+          set_json_id: toNullableText((setObj as { id?: unknown }).id),
+        },
+      },
+      { onConflict: "tcgdex_id" },
+    )
+    .select("id, series_ref_id")
+    .single();
+
+  if (setError) throw new Error(`sets_ref upsert failed: ${setError.message}`);
+  return {
+    setRefId: setRow.id as string,
+    seriesRefId: (setRow.series_ref_id as string | null) ?? seriesRefId,
+  };
 }
 
 export async function createListingAction(
@@ -180,6 +267,26 @@ export async function createListingAction(
       Boolean(validatedCandidate?.name) &&
       Boolean(validatedCandidate?.setId);
     if (!resolvedCardRefId && isTcgdexValidatedCandidate) {
+      let setRefId: string | null = null;
+      let seriesRefId: string | null = null;
+      try {
+        const refs = await upsertSetAndSeriesRefs(supabase, {
+          language: cardLanguage,
+          setId: String(validatedCandidate?.setId),
+          setObject: validatedCandidate?.set ?? null,
+        });
+        setRefId = refs.setRefId;
+        seriesRefId = refs.seriesRefId;
+      } catch (error) {
+        return {
+          status: "error",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Impossible de mettre en cache set/serie depuis TCGdex.",
+        };
+      }
+
       const { data: cachedCardRef, error: cacheError } = await supabase
         .from("cards_ref")
         .upsert(
@@ -199,6 +306,8 @@ export async function createListingAction(
             regulationMark: validatedCandidate?.regulationMark || null,
             illustrator: validatedCandidate?.illustrator || null,
             releaseYear: validatedCandidate?.releaseYear ?? null,
+            set_ref_id: setRefId,
+            series_ref_id: seriesRefId,
             estimated_condition: isGraded ? null : condition || null,
             metadata: {
               source: "tcgdex_lazy_cache",

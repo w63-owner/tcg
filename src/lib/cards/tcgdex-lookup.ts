@@ -21,6 +21,14 @@ type TcgdexSetSummary = {
 
 type TcgdexSetDetail = {
   id?: string;
+  name?: string;
+  logo?: string;
+  symbol?: string;
+  series?: string;
+  cardCount?: {
+    official?: number;
+    total?: number;
+  };
   cards?: Array<{
     id?: string;
     name?: string;
@@ -200,10 +208,14 @@ export async function lookupTcgdexCandidates(input: LookupInput): Promise<CardRe
     .slice(0, MAX_SET_DETAILS);
 
   const cardSummaryMatches: Array<{ id: string; score: number }> = [];
+  const setDetailById = new Map<string, TcgdexSetDetail>();
   for (const setRow of filteredSets) {
     const detail = await fetchJsonWithTimeout<TcgdexSetDetail>(
       `${TCGDEX_BASE_URL}/${language}/sets/${encodeURIComponent(String(setRow.id))}`,
     );
+    if (setRow?.id) {
+      setDetailById.set(String(setRow.id), detail);
+    }
     for (const card of detail.cards ?? []) {
       const id = String(card.id ?? "").trim();
       const cardName = String(card.name ?? "").trim();
@@ -234,7 +246,25 @@ export async function lookupTcgdexCandidates(input: LookupInput): Promise<CardRe
       `${TCGDEX_BASE_URL}/${language}/cards/${encodeURIComponent(cardId)}`,
     );
     const mapped = mapTcgdexCardToLookupRow(card, language);
-    if (mapped) rows.push(mapped);
+    if (mapped) {
+      const setKey = String(card.set?.id ?? "").trim();
+      const setDetail = setKey ? setDetailById.get(setKey) : undefined;
+      if (setDetail) {
+        mapped.set = {
+          cardCount: {
+            official: setDetail.cardCount?.official ?? mapped.set?.cardCount?.official ?? null,
+            total: setDetail.cardCount?.total ?? mapped.set?.cardCount?.total ?? null,
+          },
+          id: setKey || mapped.set?.id || null,
+          logo: setDetail.logo ?? mapped.set?.logo ?? null,
+          name: setDetail.name ?? mapped.set?.name ?? null,
+          series: setDetail.series ?? null,
+          seriesId: setDetail.series ? setDetail.series.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-") : null,
+          symbol: setDetail.symbol ?? mapped.set?.symbol ?? null,
+        };
+      }
+      rows.push(mapped);
+    }
   }
   return rows;
 }
