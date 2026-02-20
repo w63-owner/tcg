@@ -2,14 +2,17 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { logError, logInfo } from "@/lib/observability";
 import { detectCardTextFromImage } from "@/lib/ocr/provider";
+import { lookupTcgdexCandidates } from "@/lib/cards/tcgdex-lookup";
 import {
   buildLookupTerms,
   parseCardParameters,
   rankCardRefCandidates,
+  type CardRefCandidate,
   type CardRefLookupRow,
 } from "@/lib/ocr/parse-and-match";
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const FALLBACK_CONFIDENCE_THRESHOLD = 0.5;
 
 function sanitizeLookupToken(value: string) {
   return value.replace(/[^a-zA-Z0-9/-]/g, "").trim();
@@ -66,22 +69,23 @@ export async function POST(request: Request) {
       .map(sanitizeLookupToken)
       .filter(Boolean);
 
-    let candidateRows: CardRefLookupRow[] = [];
+    let localRows: CardRefLookupRow[] = [];
+    let fallbackRows: CardRefLookupRow[] = [];
     let feedbackBoostByCardRefId: Record<string, number> = {};
     if (lookupTerms.length > 0) {
       const orFilters = lookupTerms
         .flatMap((term) => [
           `name.ilike.%${term}%`,
-          `set_id.ilike.%${term}%`,
-          `tcg_id.ilike.%${term}%`,
-          `card_number.ilike.%${term}%`,
+          `setId.ilike.%${term}%`,
+          `tcgId.ilike.%${term}%`,
+          `localId.ilike.%${term}%`,
         ])
         .join(",");
 
       const { data: rows, error: lookupError } = await supabase
         .from("cards_ref")
         .select(
-          "id, name, set_id, tcg_id, card_number, language, hp, rarity, finish, is_secret, is_promo, vintage_hint, regulation_mark, illustrator, estimated_condition, release_year, image_url",
+          "id, category, name, setId, set, variants, tcgId, localId, language, hp, rarity, finish, is_secret, is_promo, vintage_hint, regulationMark, illustrator, estimated_condition, releaseYear, image",
         )
         .or(orFilters)
         .limit(80);
@@ -93,10 +97,10 @@ export async function POST(request: Request) {
           context: { userId: user.id },
         });
       } else {
-        candidateRows = (rows ?? []) as CardRefLookupRow[];
+        localRows = (rows ?? []) as CardRefLookupRow[];
 
-        if (candidateRows.length > 0) {
-          const cardRefIds = candidateRows.map((row) => row.id);
+        if (localRows.length > 0) {
+          const cardRefIds = localRows.map((row) => row.id);
           const { data: feedbackRows, error: feedbackError } = await supabase
             .from("ocr_attempts")
             .select("selected_card_ref_id")
@@ -130,13 +134,63 @@ export async function POST(request: Request) {
       }
     }
 
-    const { candidates, confidence } = rankCardRefCandidates({
+    const localRank = rankCardRefCandidates({
       parsed,
       rawText: ocrResult.rawText,
-      rows: candidateRows,
+      rows: localRows,
       limit: 5,
       feedbackBoostByCardRefId,
     });
+    const shouldUseFallback =
+      Boolean(parsed.name) &&
+      (localRank.candidates.length === 0 || localRank.confidence < FALLBACK_CONFIDENCE_THRESHOLD);
+
+    if (shouldUseFallback) {
+      try {
+        fallbackRows = await lookupTcgdexCandidates({
+          name: parsed.name,
+          cardNumber: parsed.cardNumber,
+          language: parsed.language,
+        });
+      } catch (error) {
+        logError({
+          event: "ocr_tcgdex_fallback_failed",
+          message: error instanceof Error ? error.message : "fallback_failed",
+          context: { userId: user.id },
+        });
+      }
+    }
+
+    const byKey = new Map<string, CardRefLookupRow>();
+    for (const row of localRows) {
+      const dedupeKey = String(row.tcgId ?? row.id);
+      byKey.set(dedupeKey, row);
+    }
+    for (const row of fallbackRows) {
+      const dedupeKey = String(row.tcgId ?? row.id);
+      if (!byKey.has(dedupeKey)) byKey.set(dedupeKey, row);
+    }
+    const mergedRows = Array.from(byKey.values());
+    const fallbackIdSet = new Set(fallbackRows.map((row) => row.id));
+
+    const ranked = rankCardRefCandidates({
+      parsed,
+      rawText: ocrResult.rawText,
+      rows: mergedRows,
+      limit: 5,
+      feedbackBoostByCardRefId,
+    });
+    const candidates: CardRefCandidate[] = ranked.candidates.map((candidate) => ({
+      ...candidate,
+      source: fallbackIdSet.has(candidate.cardRefId) ? "tcgdex_fallback" : "local",
+    }));
+    const confidence = ranked.confidence;
+    const matchMode =
+      fallbackRows.length > 0 && localRows.length > 0
+        ? "hybrid_catalog"
+        : fallbackRows.length > 0
+          ? "tcgdex_fallback"
+          : "strict_catalog";
 
     const { data: attemptRow, error: attemptError } = await supabase
       .from("ocr_attempts")
@@ -172,7 +226,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       ok: true,
-      matchMode: "strict_catalog",
+      matchMode,
       attemptId: attemptRow?.id ?? null,
       rawText: ocrResult.rawText,
       parsed,

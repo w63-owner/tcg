@@ -242,7 +242,7 @@ async function upsertCardsRef(rows) {
   for (const chunk of inBatches(rows, BATCH_SIZE)) {
     const { error } = await admin
       .from("cards_ref")
-      .upsert(chunk, { onConflict: "tcg_id" });
+      .upsert(chunk, { onConflict: "tcgId" });
     if (error) {
       throw new Error(`cards_ref upsert failed: ${error.message}`);
     }
@@ -298,22 +298,22 @@ async function run() {
     const setId = inferSetLabel(product);
     const cardNumber = inferCardNumber(product);
     cardsRefByTcgId.set(tcgId, {
-      tcg_id: tcgId,
+      tcgId,
       name,
-      set_id: setId,
-      image_url: null,
-      card_number: cardNumber,
+      setId,
+      image: null,
+      localId: cardNumber,
       hp: inferHp(product),
       rarity: inferRarity(product),
       finish: inferFinish(product),
       is_secret: inferIsSecret(cardNumber),
       is_promo: inferIsPromo(product),
       vintage_hint: inferVintageHint(product),
-      regulation_mark: inferRegulationMark(product),
+      regulationMark: inferRegulationMark(product),
       illustrator: inferIllustrator(product),
       estimated_condition: inferEstimatedCondition(product),
       language: inferLanguage(product),
-      release_year: inferReleaseYear(product),
+      releaseYear: inferReleaseYear(product),
       metadata: {
         source_product_id: idProduct,
         source_category_id: Number(product?.idCategory ?? 0) || null,

@@ -173,7 +173,7 @@ async function countNewListingsForSavedSearch(
   if (setFilter || rarityFilter) {
     let cardRefRequest = supabase.from("cards_ref").select("id");
     if (setFilter) {
-      cardRefRequest = cardRefRequest.eq("set_id", setFilter);
+      cardRefRequest = cardRefRequest.eq("setId", setFilter);
     }
     if (rarityFilter) {
       cardRefRequest = cardRefRequest.eq("rarity", rarityFilter);

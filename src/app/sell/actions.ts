@@ -38,6 +38,35 @@ async function uploadImage(
   return data.publicUrl;
 }
 
+type ValidatedCandidatePayload = {
+  source?: "local" | "tcgdex_fallback";
+  category?: string | null;
+  tcgId?: string | null;
+  name?: string;
+  setId?: string;
+  set?: Record<string, unknown> | null;
+  variants?: Record<string, unknown> | null;
+  localId?: string | null;
+  language?: string | null;
+  hp?: number | null;
+  rarity?: string | null;
+  finish?: string | null;
+  regulationMark?: string | null;
+  illustrator?: string | null;
+  releaseYear?: number | null;
+  image?: string | null;
+};
+
+function parseValidatedCandidatePayload(value: FormDataEntryValue | null): ValidatedCandidatePayload | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  try {
+    const parsed = JSON.parse(value) as ValidatedCandidatePayload;
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function createListingAction(
   _previousState: SellFormState,
   formData: FormData,
@@ -79,6 +108,10 @@ export async function createListingAction(
     const cardHp = cardHpRaw ? Number(cardHpRaw) : null;
     const cardRarity = String(formData.get("card_rarity") ?? "").trim();
     const cardFinish = String(formData.get("card_finish") ?? "").trim();
+    const isCatalogCandidateValidated = String(
+      formData.get("is_catalog_candidate_validated") ?? "",
+    ).trim() === "1";
+    const validatedCandidate = parseValidatedCandidatePayload(formData.get("selected_candidate_payload"));
     const frontImage = formData.get("front_image");
     const backImage = formData.get("back_image");
     const isUuid = (value: string) =>
@@ -140,6 +173,52 @@ export async function createListingAction(
     ]);
 
     let resolvedCardRefId: string | null = isUuid(cardRefId) ? cardRefId : null;
+    const isTcgdexValidatedCandidate =
+      isCatalogCandidateValidated &&
+      validatedCandidate?.source === "tcgdex_fallback" &&
+      Boolean(validatedCandidate?.tcgId) &&
+      Boolean(validatedCandidate?.name) &&
+      Boolean(validatedCandidate?.setId);
+    if (!resolvedCardRefId && isTcgdexValidatedCandidate) {
+      const { data: cachedCardRef, error: cacheError } = await supabase
+        .from("cards_ref")
+        .upsert(
+          {
+            tcgId: String(validatedCandidate?.tcgId),
+            category: validatedCandidate?.category ?? null,
+            name: String(validatedCandidate?.name),
+            setId: String(validatedCandidate?.setId),
+            set: validatedCandidate?.set ?? {},
+            variants: validatedCandidate?.variants ?? {},
+            image: validatedCandidate?.image || frontImageUrl,
+            localId: validatedCandidate?.localId || cardNumber || null,
+            language: validatedCandidate?.language || cardLanguage,
+            hp: validatedCandidate?.hp ?? cardHp,
+            rarity: validatedCandidate?.rarity || cardRarity || null,
+            finish: validatedCandidate?.finish || cardFinish || null,
+            regulationMark: validatedCandidate?.regulationMark || null,
+            illustrator: validatedCandidate?.illustrator || null,
+            releaseYear: validatedCandidate?.releaseYear ?? null,
+            estimated_condition: isGraded ? null : condition || null,
+            metadata: {
+              source: "tcgdex_lazy_cache",
+              validated_by_user_id: user.id,
+            },
+          },
+          { onConflict: "tcgId" },
+        )
+        .select("id")
+        .single();
+
+      if (cacheError) {
+        return {
+          status: "error",
+          message: `Impossible de mettre en cache la carte TCGdex: ${cacheError.message}`,
+        };
+      }
+      resolvedCardRefId = cachedCardRef.id;
+    }
+
     if (!resolvedCardRefId && (cardName || cardSet || cardNumber || cardLanguage || cardRarity || cardFinish)) {
       if (!cardName || !cardSet) {
         return {
@@ -159,10 +238,10 @@ export async function createListingAction(
         .from("cards_ref")
         .insert({
           name: cardName,
-          set_id: cardSet,
-          tcg_id: `manual-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`,
-          image_url: frontImageUrl,
-          card_number: cardNumber || null,
+          setId: cardSet,
+          tcgId: `manual-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`,
+          image: frontImageUrl,
+          localId: cardNumber || null,
           language: cardLanguage,
           hp: cardHp,
           rarity: cardRarity || null,

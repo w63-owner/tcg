@@ -32,9 +32,9 @@ type ListingDetailsRow = {
 type CardRefDetailsRow = {
   id: string;
   name: string;
-  set_id: string | null;
-  tcg_id: string | null;
-  card_number: string | null;
+  setId: string | null;
+  tcgId: string | null;
+  localId: string | null;
   language: string | null;
   hp: number | null;
   rarity: string | null;
@@ -42,10 +42,10 @@ type CardRefDetailsRow = {
   is_secret: boolean | null;
   is_promo: boolean | null;
   vintage_hint: string | null;
-  regulation_mark: string | null;
+  regulationMark: string | null;
   illustrator: string | null;
   estimated_condition: string | null;
-  release_year: number | null;
+  releaseYear: number | null;
 };
 
 const SET_CODE_LABELS: Record<string, string> = {
@@ -201,7 +201,7 @@ export default async function ListingPage({
     const { data: cardRefRow } = await supabase
       .from("cards_ref")
       .select(
-        "id, name, set_id, tcg_id, card_number, language, hp, rarity, finish, is_secret, is_promo, vintage_hint, regulation_mark, illustrator, estimated_condition, release_year",
+        "id, name, setId, tcgId, localId, language, hp, rarity, finish, is_secret, is_promo, vintage_hint, regulationMark, illustrator, estimated_condition, releaseYear",
       )
       .eq("id", listing.card_ref_id)
       .maybeSingle<CardRefDetailsRow>();
@@ -280,7 +280,7 @@ export default async function ListingPage({
           {isEditMode ? (
             <section className="space-y-2 rounded-md border p-3">
               <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
-                Modifier l'annonce
+                Modifier l&apos;annonce
               </p>
               <form action={updateListingPriceAction} className="space-y-2">
                 <input type="hidden" name="listing_id" value={listing.id} />
@@ -380,11 +380,11 @@ export default async function ListingPage({
                 <div className="grid grid-cols-2 gap-x-3 gap-y-2">
                   <div>
                     <p className="text-muted-foreground text-xs">Set</p>
-                    <p className="text-sm">{formatSetLabel(cardRef.set_id)}</p>
+                    <p className="text-sm">{formatSetLabel(cardRef.setId)}</p>
                   </div>
                   <div>
                     <p className="text-muted-foreground text-xs">Numero</p>
-                    <p className="text-sm">{cardRef.card_number || "-"}</p>
+                    <p className="text-sm">{cardRef.localId || "-"}</p>
                   </div>
                   <div>
                     <p className="text-muted-foreground text-xs">Langue</p>
@@ -424,7 +424,7 @@ export default async function ListingPage({
                   </div>
                   <div>
                     <p className="text-muted-foreground text-xs">Regulation</p>
-                    <p className="text-sm">{cardRef.regulation_mark || "-"}</p>
+                    <p className="text-sm">{cardRef.regulationMark || "-"}</p>
                   </div>
                   <div>
                     <p className="text-muted-foreground text-xs">Illustrateur</p>
@@ -432,11 +432,11 @@ export default async function ListingPage({
                   </div>
                   <div>
                     <p className="text-muted-foreground text-xs">Annee</p>
-                    <p className="text-sm">{cardRef.release_year ?? "-"}</p>
+                    <p className="text-sm">{cardRef.releaseYear ?? "-"}</p>
                   </div>
                   <div className="col-span-2">
                     <p className="text-muted-foreground text-xs">Ref. collection</p>
-                    <p className="text-sm">{cardRef.tcg_id || cardRef.id}</p>
+                    <p className="text-sm">{cardRef.tcgId || cardRef.id}</p>
                   </div>
                 </div>
               </section>

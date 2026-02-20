@@ -56,11 +56,11 @@ export function parseFeedFilters(params: Record<string, string | undefined>): Fe
 export async function fetchSetOptions(supabase: SupabaseClient) {
   const { data: setRows } = await supabase
     .from("cards_ref")
-    .select("set_id")
-    .order("set_id", { ascending: true })
+    .select("setId")
+    .order("setId", { ascending: true })
     .limit(500);
 
-  return Array.from(new Set((setRows ?? []).map((row) => row.set_id).filter(Boolean)));
+  return Array.from(new Set((setRows ?? []).map((row) => row.setId).filter(Boolean)));
 }
 
 export async function fetchCardRefIdsByQuery(supabase: SupabaseClient, query: string) {
@@ -71,7 +71,7 @@ export async function fetchCardRefIdsByQuery(supabase: SupabaseClient, query: st
     .from("cards_ref")
     .select("id")
     .or(
-      `name.ilike.%${term}%,set_id.ilike.%${term}%,tcg_id.ilike.%${term}%,card_number.ilike.%${term}%,language.ilike.%${term}%,release_year.ilike.%${term}%`,
+      `name.ilike.%${term}%,setId.ilike.%${term}%,tcgId.ilike.%${term}%,localId.ilike.%${term}%,language.ilike.%${term}%,releaseYear.ilike.%${term}%`,
     )
     .limit(2000);
 
@@ -98,7 +98,7 @@ export async function fetchListingsFeedPage(params: {
   if (filters.set || filters.rarity) {
     let cardRefRequest = supabase.from("cards_ref").select("id");
     if (filters.set) {
-      cardRefRequest = cardRefRequest.eq("set_id", filters.set);
+      cardRefRequest = cardRefRequest.eq("setId", filters.set);
     }
     if (filters.rarity) {
       cardRefRequest = cardRefRequest.eq("rarity", filters.rarity);

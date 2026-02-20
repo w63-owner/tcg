@@ -51,39 +51,39 @@ const demoUsers = [
 const cardsSeed = [
   {
     name: "Charizard",
-    set_id: "Base Set",
-    tcg_id: "base1-4",
-    image_url: "https://images.pokemontcg.io/base1/4_hires.png",
+    setId: "Base Set",
+    tcgId: "base1-4",
+    image: "https://images.pokemontcg.io/base1/4_hires.png",
   },
   {
     name: "Pikachu VMAX",
-    set_id: "Vivid Voltage",
-    tcg_id: "swsh4-44",
-    image_url: "https://images.pokemontcg.io/swsh4/44_hires.png",
+    setId: "Vivid Voltage",
+    tcgId: "swsh4-44",
+    image: "https://images.pokemontcg.io/swsh4/44_hires.png",
   },
   {
     name: "Mew VMAX",
-    set_id: "Fusion Strike",
-    tcg_id: "swsh8-114",
-    image_url: "https://images.pokemontcg.io/swsh8/114_hires.png",
+    setId: "Fusion Strike",
+    tcgId: "swsh8-114",
+    image: "https://images.pokemontcg.io/swsh8/114_hires.png",
   },
   {
     name: "Lugia V",
-    set_id: "Silver Tempest",
-    tcg_id: "swsh12-138",
-    image_url: "https://images.pokemontcg.io/swsh12/138_hires.png",
+    setId: "Silver Tempest",
+    tcgId: "swsh12-138",
+    image: "https://images.pokemontcg.io/swsh12/138_hires.png",
   },
   {
     name: "Umbreon VMAX",
-    set_id: "Evolving Skies",
-    tcg_id: "swsh7-95",
-    image_url: "https://images.pokemontcg.io/swsh7/95_hires.png",
+    setId: "Evolving Skies",
+    tcgId: "swsh7-95",
+    image: "https://images.pokemontcg.io/swsh7/95_hires.png",
   },
   {
     name: "Gengar VMAX",
-    set_id: "Fusion Strike",
-    tcg_id: "swsh8-157",
-    image_url: "https://images.pokemontcg.io/swsh8/157_hires.png",
+    setId: "Fusion Strike",
+    tcgId: "swsh8-157",
+    image: "https://images.pokemontcg.io/swsh8/157_hires.png",
   },
 ];
 
@@ -246,19 +246,19 @@ async function run() {
 
   const { error: cardsErr } = await admin
     .from("cards_ref")
-    .upsert(cardsSeed, { onConflict: "tcg_id" });
+    .upsert(cardsSeed, { onConflict: "tcgId" });
   if (cardsErr) throw new Error(`cards_ref upsert failed: ${cardsErr.message}`);
 
   const { data: cardsRows, error: cardsSelectErr } = await admin
     .from("cards_ref")
-    .select("id, tcg_id, image_url")
+    .select("id, tcgId, image")
     .in(
-      "tcg_id",
-      cardsSeed.map((c) => c.tcg_id),
+      "tcgId",
+      cardsSeed.map((c) => c.tcgId),
     );
   if (cardsSelectErr) throw new Error(`cards_ref select failed: ${cardsSelectErr.message}`);
 
-  const cardByTcg = new Map(cardsRows.map((c) => [c.tcg_id, c]));
+  const cardByTcg = new Map(cardsRows.map((c) => [c.tcgId, c]));
 
   const { error: deleteErr } = await admin
     .from("listings")
@@ -291,8 +291,8 @@ async function run() {
         : null,
       grade_note: isGraded ? gradeStep : null,
       delivery_weight_class: randomPick(["XS", "S", "M"]),
-      cover_image_url: card.image_url,
-      back_image_url: card.image_url,
+      cover_image_url: card.image,
+      back_image_url: card.image,
       status: "ACTIVE",
     });
   }

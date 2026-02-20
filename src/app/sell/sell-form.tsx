@@ -34,7 +34,6 @@ const CONDITIONS = [
 ] as const;
 
 const GRADING_COMPANIES = ["PSA", "PCA", "BGS", "CGC", "SGC", "ACE", "OTHER"] as const;
-const WEIGHT_CLASSES = ["XS", "S", "M", "L", "XL"] as const;
 const RARITY_OPTIONS = [
   "COMMON",
   "UNCOMMON",
@@ -93,8 +92,27 @@ function resolveDisplayedSetNumber(candidateCardNumber?: string | null) {
 
 type OcrCandidate = {
   cardRefId: string;
+  source?: "local" | "tcgdex_fallback";
+  category?: string | null;
   name: string;
   set: string;
+  setDetails?: {
+    cardCount?: {
+      official?: number | null;
+      total?: number | null;
+    };
+    id?: string | null;
+    logo?: string | null;
+    name?: string | null;
+    symbol?: string | null;
+  } | null;
+  variants?: {
+    firstEdition?: boolean;
+    holo?: boolean;
+    normal?: boolean;
+    reverse?: boolean;
+    wPromo?: boolean;
+  } | null;
   tcgId?: string | null;
   cardNumber?: string | null;
   language?: string | null;
@@ -138,6 +156,12 @@ function mapGradeToCondition(grade: number) {
   return "POOR";
 }
 
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
+}
+
 export function SellForm() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
@@ -148,7 +172,6 @@ export function SellForm() {
   const [priceValue, setPriceValue] = useState("");
   const [conditionValue, setConditionValue] = useState("NEAR_MINT");
   const [gradingCompanyValue, setGradingCompanyValue] = useState("PSA");
-  const [deliveryWeightClassValue, setDeliveryWeightClassValue] = useState("S");
   const [cardNameValue, setCardNameValue] = useState("");
   const [cardSetValue, setCardSetValue] = useState("");
   const [cardNumberValue, setCardNumberValue] = useState("");
@@ -174,6 +197,8 @@ export function SellForm() {
   const [ocrParsed, setOcrParsed] = useState<OcrParsed | null>(null);
   const [ocrError, setOcrError] = useState("");
   const [isOcrLoading, setIsOcrLoading] = useState(false);
+  const [validatedCandidatePayload, setValidatedCandidatePayload] = useState("");
+  const [isCatalogCandidateValidated, setIsCatalogCandidateValidated] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const frontPreviewUrlRef = useRef<string | null>(null);
@@ -231,6 +256,7 @@ export function SellForm() {
     [frontPreviewUrl, backPreviewUrl],
   );
   const hasResolvedMatchDecision = matchDecision !== "pending";
+  const selectedCardRefIdForSubmit = isUuid(ocrSelectedCardRefId) ? ocrSelectedCardRefId : "";
 
   const steps = [
     { number: 1, label: "Photos" },
@@ -376,7 +402,11 @@ export function SellForm() {
 
       if (top) {
         setOcrSelectedCardRefId(top.cardRefId);
-        void syncOcrSelection(attemptId, top.cardRefId);
+        setIsCatalogCandidateValidated(false);
+        setValidatedCandidatePayload("");
+        if (isUuid(top.cardRefId)) {
+          void syncOcrSelection(attemptId, top.cardRefId);
+        }
       }
 
     } catch {
@@ -519,6 +549,41 @@ export function SellForm() {
     setCardRarityValue(rarityValue);
     setCardFinishValue(finishValue);
     setHasSubmittedCurrentFlow(false);
+    setIsCatalogCandidateValidated(false);
+    setValidatedCandidatePayload("");
+    setStep((current) => Math.min(4, current + 1));
+  };
+
+  const confirmCatalogCandidate = () => {
+    if (!selectedOcrCandidate) return;
+    setMatchDecision("matched");
+    setTitleValue(selectedOcrCandidate.name || "");
+    if (!isGraded && selectedOcrCandidate.estimatedCondition) {
+      setConditionValue(selectedOcrCandidate.estimatedCondition);
+    }
+    applyCardDetailsFromCandidate(selectedOcrCandidate);
+    setIsCatalogCandidateValidated(true);
+    setValidatedCandidatePayload(
+      JSON.stringify({
+        source: selectedOcrCandidate.source ?? "local",
+        category: selectedOcrCandidate.category ?? null,
+        tcgId: selectedOcrCandidate.tcgId ?? null,
+        name: selectedOcrCandidate.name,
+        setId: selectedOcrCandidate.set,
+        set: selectedOcrCandidate.setDetails ?? null,
+        variants: selectedOcrCandidate.variants ?? null,
+        localId: selectedOcrCandidate.cardNumber ?? null,
+        language: selectedOcrCandidate.language ?? null,
+        hp: selectedOcrCandidate.hp ?? null,
+        rarity: selectedOcrCandidate.rarity ?? null,
+        finish: selectedOcrCandidate.finish ?? null,
+        regulationMark: selectedOcrCandidate.regulationMark ?? null,
+        illustrator: selectedOcrCandidate.illustrator ?? null,
+        releaseYear: selectedOcrCandidate.releaseYear ?? null,
+        image: selectedOcrCandidate.imageUrl ?? null,
+      }),
+    );
+    setHasSubmittedCurrentFlow(false);
     setStep((current) => Math.min(4, current + 1));
   };
 
@@ -607,9 +672,11 @@ export function SellForm() {
           <input type="hidden" name="condition" value={conditionValue} />
           <input type="hidden" name="grading_company" value={gradingCompanyValue} />
           <input type="hidden" name="grade_note" value={gradeValue} />
-          <input type="hidden" name="delivery_weight_class" value={deliveryWeightClassValue} />
-          <input type="hidden" name="card_ref_id" value={ocrSelectedCardRefId} />
+          <input type="hidden" name="delivery_weight_class" value="S" />
+          <input type="hidden" name="card_ref_id" value={selectedCardRefIdForSubmit} />
           <input type="hidden" name="ocr_attempt_id" value={ocrAttemptId} />
+          <input type="hidden" name="selected_candidate_payload" value={validatedCandidatePayload} />
+          <input type="hidden" name="is_catalog_candidate_validated" value={isCatalogCandidateValidated ? "1" : "0"} />
           <input type="hidden" name="card_name" value={cardNameValue} />
           <input type="hidden" name="card_set" value={cardSetValue} />
           <input type="hidden" name="card_number" value={cardNumberValue} />
@@ -694,12 +761,9 @@ export function SellForm() {
                           onClick={() => {
                             setOcrSelectedCardRefId(candidate.cardRefId);
                             setMatchDecision("matched");
-                            setTitleValue(candidate.name || "");
-                            if (!isGraded && candidate.estimatedCondition) {
-                              setConditionValue(candidate.estimatedCondition);
-                            }
-                            applyCardDetailsFromCandidate(candidate);
-                            if (ocrAttemptId) {
+                            setIsCatalogCandidateValidated(false);
+                            setValidatedCandidatePayload("");
+                            if (ocrAttemptId && isUuid(candidate.cardRefId)) {
                               void fetch("/api/ocr/card/selection", {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
@@ -1021,7 +1085,7 @@ export function SellForm() {
                 <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
                   Prix et livraison
                 </p>
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="grid grid-cols-1 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="price_seller" className={FORM_LABEL_CLASS}>
                     Prix net vendeur (EUR)
@@ -1041,26 +1105,6 @@ export function SellForm() {
                     Prix estime affiche: {previewDisplayPrice.toFixed(2)} EUR (hors livraison).
                   </p>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="delivery_weight_class" className={FORM_LABEL_CLASS}>
-                    Classe de poids
-                  </Label>
-                  <Select
-                    value={deliveryWeightClassValue}
-                    onValueChange={setDeliveryWeightClassValue}
-                  >
-                    <SelectTrigger id="delivery_weight_class" className={`w-full ${FORM_INPUT_CLASS}`}>
-                      <SelectValue placeholder="Choisir une classe" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {WEIGHT_CLASSES.map((weightClass) => (
-                        <SelectItem key={weightClass} value={weightClass}>
-                          {weightClass}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
                 </div>
               </section>
             </div>
@@ -1073,18 +1117,15 @@ export function SellForm() {
                   {step === 2 ? (
                     <div className="flex w-full flex-wrap gap-2">
                       <Button type="button" variant="outline" onClick={confirmNoCatalogMatch}>
-                        Aucune correspondance
+                        Je ne trouve pas ma carte
                       </Button>
                       <Button
                         type="button"
                         disabled={isPending || !canGoNext}
-                        onClick={() => {
-                          setHasSubmittedCurrentFlow(false);
-                          setStep((current) => Math.min(4, current + 1));
-                        }}
+                        onClick={confirmCatalogCandidate}
                         className="w-full text-base md:w-auto md:text-sm"
                       >
-                        Etape suivante
+                        Valider cette carte
                       </Button>
                     </div>
                   ) : (
@@ -1107,13 +1148,10 @@ export function SellForm() {
                       <Button
                         type="button"
                         disabled={isPending || !canGoNext}
-                        onClick={() => {
-                          setHasSubmittedCurrentFlow(false);
-                          setStep((current) => Math.min(4, current + 1));
-                        }}
+                        onClick={confirmCatalogCandidate}
                         className="h-12 text-base shadow-lg"
                       >
-                        Confirmer
+                        Valider cette carte
                       </Button>
                       <Button
                         type="button"
@@ -1121,7 +1159,7 @@ export function SellForm() {
                         onClick={confirmNoCatalogMatch}
                         className="h-12"
                       >
-                        Aucune correspondance
+                        Je ne trouve pas ma carte
                       </Button>
                     </div>
                   ) : (

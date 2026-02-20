@@ -51,6 +51,36 @@ export function inferSetId(rawCard, source) {
   return source === "pokecadata" ? "JP-UNKNOWN" : "UNKNOWN";
 }
 
+function toSafeCount(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return Math.trunc(parsed);
+}
+
+export function inferCategory(rawCard) {
+  const category = normalizeWhitespace(rawCard?.category);
+  if (!category) return "Pokemon";
+  return category;
+}
+
+export function inferSetObject(rawCard, source, setId) {
+  const sourceSet = rawCard?.set ?? {};
+  const official = toSafeCount(
+    sourceSet?.cardCount?.official ?? sourceSet?.printedTotal ?? rawCard?.set?.printedTotal,
+  );
+  const total = toSafeCount(sourceSet?.cardCount?.total ?? sourceSet?.total ?? rawCard?.set?.total);
+  return {
+    cardCount: {
+      official,
+      total,
+    },
+    id: setId ?? inferSetId(rawCard, source),
+    logo: normalizeWhitespace(sourceSet?.logo),
+    name: normalizeWhitespace(sourceSet?.name || rawCard?.setName) || (setId ?? inferSetId(rawCard, source)),
+    symbol: normalizeWhitespace(sourceSet?.symbol),
+  };
+}
+
 export function inferCardNumber(rawCard) {
   const direct = normalizeWhitespace(rawCard?.number || rawCard?.localId || rawCard?.collectorNumber);
   if (direct) return direct;
@@ -71,6 +101,7 @@ export function inferReleaseYear(rawCard) {
   const candidates = [
     rawCard?.set?.releaseDate,
     rawCard?.releaseDate,
+    rawCard?.releaseYear,
     rawCard?.release_year,
     rawCard?.year,
     rawCard?.dateAdded,
@@ -139,6 +170,25 @@ export function inferPromo(rawCard) {
   return null;
 }
 
+export function inferVariants(rawCard) {
+  const sourceVariants = rawCard?.variants ?? {};
+  const finishRaw = normalizeWhitespace(rawCard?.finish || rawCard?.rarity || rawCard?.name).toLowerCase();
+  const isPromo = inferPromo(rawCard) === true;
+  const isReverse = Boolean(sourceVariants.reverse) || /\breverse\b|inverse/.test(finishRaw);
+  const isHolo = Boolean(sourceVariants.holo) || /\bholo\b/.test(finishRaw);
+  const isFirstEdition =
+    Boolean(sourceVariants.firstEdition) || /1st edition|edition 1/i.test(normalizeWhitespace(rawCard?.name));
+  const isWPromo = Boolean(sourceVariants.wPromo) || isPromo;
+  const isNormal = sourceVariants.normal === false ? false : !(isHolo && !isReverse);
+  return {
+    firstEdition: isFirstEdition,
+    holo: isHolo,
+    normal: isNormal,
+    reverse: isReverse,
+    wPromo: isWPromo,
+  };
+}
+
 export function inferSecret(cardNumber) {
   if (!cardNumber || !cardNumber.includes("/")) return null;
   const [left, right] = cardNumber.split("/").map((part) => Number(part));
@@ -149,8 +199,8 @@ export function inferSecret(cardNumber) {
 export function buildCanonicalKey(card) {
   return [
     normalizeToken(card.language),
-    normalizeToken(card.set_id),
-    normalizeToken(card.card_number),
+    normalizeToken(card.setId),
+    normalizeToken(card.localId),
     normalizeToken(card.name),
   ].join("|");
 }
@@ -158,12 +208,12 @@ export function buildCanonicalKey(card) {
 export function estimateMappingConfidence(card) {
   let score = 0.35;
   if (card.name) score += 0.2;
-  if (card.set_id && card.set_id !== "UNKNOWN") score += 0.2;
-  if (card.card_number) score += 0.12;
+  if (card.setId && card.setId !== "UNKNOWN") score += 0.2;
+  if (card.localId) score += 0.12;
   if (card.hp) score += 0.05;
   if (card.rarity) score += 0.04;
   if (card.illustrator) score += 0.02;
-  if (card.release_year) score += 0.02;
+  if (card.releaseYear) score += 0.02;
   return Number(Math.min(0.98, score).toFixed(3));
 }
 
@@ -181,27 +231,33 @@ export function toEstimatedCondition(rawCard) {
 
 export function buildNormalizedCard({ source, externalId, rawCard }) {
   const name = normalizeWhitespace(rawCard?.name || rawCard?.cardName);
-  const set_id = inferSetId(rawCard, source);
-  const card_number = inferCardNumber(rawCard);
+  const setId = inferSetId(rawCard, source);
+  const localId = inferCardNumber(rawCard);
   const language = inferLanguage(rawCard, source);
+  const category = inferCategory(rawCard);
+  const set = inferSetObject(rawCard, source, setId);
+  const variants = inferVariants(rawCard);
   const normalized = {
     source,
     external_id: externalId,
+    category,
     name,
-    set_id,
-    card_number,
+    setId,
+    set,
+    variants,
+    localId,
     hp: inferHp(rawCard),
     rarity: inferRarity(rawCard),
     finish: inferFinish(rawCard),
-    is_secret: inferSecret(card_number),
+    is_secret: inferSecret(localId),
     is_promo: inferPromo(rawCard),
     vintage_hint: inferVintageHint(rawCard),
-    regulation_mark: inferRegulationMark(rawCard),
+    regulationMark: inferRegulationMark(rawCard),
     illustrator: inferIllustrator(rawCard),
     estimated_condition: toEstimatedCondition(rawCard),
     language,
-    release_year: inferReleaseYear(rawCard),
-    image_url: normalizeWhitespace(rawCard?.images?.large || rawCard?.images?.small || rawCard?.image),
+    releaseYear: inferReleaseYear(rawCard),
+    image: normalizeWhitespace(rawCard?.images?.large || rawCard?.images?.small || rawCard?.image),
     metadata: {
       source,
       external_id: externalId,
@@ -220,7 +276,7 @@ export function buildNormalizedCard({ source, externalId, rawCard }) {
     canonical_key,
     mapping_confidence,
     source_priority,
-    tcg_id: `catalog:${canonical_key}`,
+    tcgId: `catalog:${canonical_key}`,
   };
 }
 

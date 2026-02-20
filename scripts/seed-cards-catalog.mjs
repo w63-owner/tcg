@@ -392,28 +392,31 @@ async function upsertCardsRefFromMergedRows(rows) {
   let count = 0;
   for (const chunk of inBatches(rows, 500)) {
     const payload = chunk.map((row) => ({
-      tcg_id: row.tcg_id,
+      tcgId: row.tcgId,
+      category: row.category || null,
       name: row.name,
-      set_id: row.set_id,
-      image_url: row.image_url || null,
-      card_number: row.card_number || null,
+      setId: row.setId,
+      set: row.set ?? {},
+      variants: row.variants ?? {},
+      image: row.image || null,
+      localId: row.localId || null,
       hp: row.hp ?? null,
       rarity: row.rarity || null,
       finish: row.finish || null,
       is_secret: row.is_secret ?? null,
       is_promo: row.is_promo ?? null,
       vintage_hint: row.vintage_hint || null,
-      regulation_mark: row.regulation_mark || null,
+      regulationMark: row.regulationMark || null,
       illustrator: row.illustrator || null,
       estimated_condition: row.estimated_condition || null,
       language: row.language || null,
-      release_year: row.release_year ?? null,
+      releaseYear: row.releaseYear ?? null,
       metadata: row.metadata ?? {},
     }));
 
     const { error } = await admin
       .from("cards_ref")
-      .upsert(payload, { onConflict: "tcg_id" });
+      .upsert(payload, { onConflict: "tcgId" });
     if (error) {
       throw new Error(`cards_ref upsert failed: ${error.message}`);
     }
@@ -451,29 +454,32 @@ async function run() {
           rawCard: row.payload,
         }),
       )
-      .filter((row) => Boolean(row.name) && Boolean(row.set_id));
+      .filter((row) => Boolean(row.name) && Boolean(row.setId));
 
     const normalizedInsertRows = normalizedRows.map((row) => ({
       run_id: runId,
       source: row.source,
       external_id: row.external_id,
       canonical_key: row.canonical_key,
-      tcg_id: row.tcg_id,
+      tcgId: row.tcgId,
+      category: row.category || null,
       name: row.name,
-      set_id: row.set_id,
-      card_number: row.card_number || null,
+      setId: row.setId,
+      set: row.set ?? {},
+      variants: row.variants ?? {},
+      localId: row.localId || null,
       hp: row.hp ?? null,
       rarity: row.rarity || null,
       finish: row.finish || null,
       is_secret: row.is_secret ?? null,
       is_promo: row.is_promo ?? null,
       vintage_hint: row.vintage_hint || null,
-      regulation_mark: row.regulation_mark || null,
+      regulationMark: row.regulationMark || null,
       illustrator: row.illustrator || null,
       estimated_condition: row.estimated_condition || null,
       language: row.language || null,
-      release_year: row.release_year ?? null,
-      image_url: row.image_url || null,
+      releaseYear: row.releaseYear ?? null,
+      image: row.image || null,
       mapping_confidence: row.mapping_confidence,
       source_priority: row.source_priority,
       metadata: row.metadata ?? {},

@@ -20,8 +20,27 @@ export type ParsedCardParameters = {
 
 export type CardRefCandidate = {
   cardRefId: string;
+  source?: "local" | "tcgdex_fallback";
+  category?: string | null;
   name: string;
   set: string;
+  setDetails?: {
+    cardCount?: {
+      official?: number | null;
+      total?: number | null;
+    };
+    id?: string | null;
+    logo?: string | null;
+    name?: string | null;
+    symbol?: string | null;
+  } | null;
+  variants?: {
+    firstEdition?: boolean;
+    holo?: boolean;
+    normal?: boolean;
+    reverse?: boolean;
+    wPromo?: boolean;
+  } | null;
   tcgId?: string | null;
   cardNumber?: string | null;
   language?: string | null;
@@ -41,10 +60,28 @@ export type CardRefCandidate = {
 
 export type CardRefLookupRow = {
   id: string;
+  category?: string | null;
   name: string;
-  set_id: string;
-  tcg_id: string | null;
-  card_number?: string | null;
+  setId: string;
+  set?: {
+    cardCount?: {
+      official?: number | null;
+      total?: number | null;
+    };
+    id?: string | null;
+    logo?: string | null;
+    name?: string | null;
+    symbol?: string | null;
+  } | null;
+  variants?: {
+    firstEdition?: boolean;
+    holo?: boolean;
+    normal?: boolean;
+    reverse?: boolean;
+    wPromo?: boolean;
+  } | null;
+  tcgId: string | null;
+  localId?: string | null;
   language?: string | null;
   rarity?: string | null;
   finish?: string | null;
@@ -52,11 +89,11 @@ export type CardRefLookupRow = {
   is_secret?: boolean | null;
   is_promo?: boolean | null;
   vintage_hint?: string | null;
-  regulation_mark?: string | null;
+  regulationMark?: string | null;
   illustrator?: string | null;
   estimated_condition?: string | null;
-  release_year?: number | null;
-  image_url?: string | null;
+  releaseYear?: number | null;
+  image?: string | null;
 };
 
 function normalize(value: string) {
@@ -381,9 +418,9 @@ export function rankCardRefCandidates(params: {
     .map((row) => {
       let score = 0;
       const rowName = normalize(row.name);
-      const rowSet = normalize(row.set_id);
-      const rowTcg = normalize(row.tcg_id ?? "");
-      const rowCardNumber = normalize(row.card_number ?? "");
+      const rowSet = normalize(row.setId);
+      const rowTcg = normalize(row.tcgId ?? "");
+      const rowCardNumber = normalize(row.localId ?? "");
       const rowLanguage = normalize(row.language ?? "");
       const rowRarity = normalize(row.rarity ?? "");
       const rowFinish = normalize(row.finish ?? "");
@@ -397,7 +434,7 @@ export function rankCardRefCandidates(params: {
 
       if (parsed.set) {
         if (rowSet.includes(normalize(parsed.set))) score += 0.18;
-        score += overlapScore(parsedSetTokens, tokenize(row.set_id)) * 0.1;
+        score += overlapScore(parsedSetTokens, tokenize(row.setId)) * 0.1;
       }
 
       if (normalizedCardNumber) {
@@ -425,10 +462,14 @@ export function rankCardRefCandidates(params: {
 
       return {
         cardRefId: row.id,
+        source: "local",
+        category: row.category,
         name: row.name,
-        set: row.set_id,
-        tcgId: row.tcg_id,
-        cardNumber: row.card_number,
+        set: row.setId,
+        setDetails: row.set,
+        variants: row.variants,
+        tcgId: row.tcgId,
+        cardNumber: row.localId,
         language: row.language,
         hp: row.hp,
         rarity: row.rarity,
@@ -436,11 +477,11 @@ export function rankCardRefCandidates(params: {
         isSecret: row.is_secret,
         isPromo: row.is_promo,
         vintageHint: row.vintage_hint,
-        regulationMark: row.regulation_mark,
+        regulationMark: row.regulationMark,
         illustrator: row.illustrator,
         estimatedCondition: row.estimated_condition,
-        releaseYear: row.release_year,
-        imageUrl: row.image_url,
+        releaseYear: row.releaseYear,
+        imageUrl: row.image,
         score: Math.min(0.99, Math.max(0, Number(score.toFixed(4)))),
       } satisfies CardRefCandidate;
     })
