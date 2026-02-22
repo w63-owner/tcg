@@ -82,7 +82,7 @@ export function ListingImageCarousel({ images }: ListingImageCarouselProps) {
         >
           {validImages.map((image, imageIndex) => (
             <div key={`${image.src}-${imageIndex}`} className="relative h-full w-full shrink-0">
-              <Image src={image.src} alt={image.alt} fill className="object-cover" />
+              <Image src={image.src} alt={image.alt} fill className="object-cover object-center" />
             </div>
           ))}
         </div>

@@ -25,6 +25,20 @@ type ListingItem = ListingFeedRow & {
   initialFavorite: boolean;
 };
 
+function toListingItems(listings: ListingFeedRow[], favoriteIds: string[]) {
+  return Array.from(
+    new Map(
+      listings.map((listing) => [
+        listing.id,
+        {
+          ...listing,
+          initialFavorite: favoriteIds.includes(listing.id),
+        },
+      ]),
+    ).values(),
+  );
+}
+
 export function InfiniteListingsFeed({
   initialListings,
   initialFavoriteListingIds,
@@ -33,25 +47,6 @@ export function InfiniteListingsFeed({
   showFavoriteToggle,
   fromHref,
 }: InfiniteListingsFeedProps) {
-  const [items, setItems] = useState<ListingItem[]>(
-    Array.from(
-      new Map(
-        initialListings.map((listing) => [
-          listing.id,
-          {
-            ...listing,
-            initialFavorite: initialFavoriteListingIds.includes(listing.id),
-          },
-        ]),
-      ).values(),
-    ),
-  );
-  const [page, setPage] = useState(1);
-  const [hasNextPage, setHasNextPage] = useState(initialHasNextPage);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
-
   const queryString = useMemo(() => {
     const params = new URLSearchParams();
     Object.entries(filters).forEach(([key, value]) => {
@@ -59,9 +54,64 @@ export function InfiniteListingsFeed({
     });
     return params.toString();
   }, [filters]);
+  const cacheKey = useMemo(
+    () => `marketplace-feed:${queryString || "default"}`,
+    [queryString],
+  );
+  const [items, setItems] = useState<ListingItem[]>(
+    toListingItems(initialListings, initialFavoriteListingIds),
+  );
+  const [page, setPage] = useState(1);
+  const [hasNextPage, setHasNextPage] = useState(initialHasNextPage);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const inFlightRef = useRef(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.sessionStorage.getItem(cacheKey);
+      if (!raw) {
+        setItems(toListingItems(initialListings, initialFavoriteListingIds));
+        setPage(1);
+        setHasNextPage(initialHasNextPage);
+        return;
+      }
+      const parsed = JSON.parse(raw) as {
+        items?: ListingItem[];
+        page?: number;
+        hasNextPage?: boolean;
+      };
+      if (!Array.isArray(parsed.items) || parsed.items.length === 0) {
+        setItems(toListingItems(initialListings, initialFavoriteListingIds));
+        setPage(1);
+        setHasNextPage(initialHasNextPage);
+        return;
+      }
+      setItems(parsed.items);
+      setPage(Math.max(1, Number(parsed.page ?? 1) || 1));
+      setHasNextPage(Boolean(parsed.hasNextPage));
+    } catch {
+      setItems(toListingItems(initialListings, initialFavoriteListingIds));
+      setPage(1);
+      setHasNextPage(initialHasNextPage);
+    }
+  }, [cacheKey, initialHasNextPage, initialFavoriteListingIds, initialListings]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const payload = JSON.stringify({
+      items,
+      page,
+      hasNextPage,
+    });
+    window.sessionStorage.setItem(cacheKey, payload);
+  }, [cacheKey, hasNextPage, items, page]);
 
   const loadMore = useCallback(async () => {
-    if (!hasNextPage || isLoadingMore) return;
+    if (!hasNextPage || isLoadingMore || inFlightRef.current) return;
+    inFlightRef.current = true;
     setIsLoadingMore(true);
     setLoadError(null);
     try {
@@ -88,6 +138,7 @@ export function InfiniteListingsFeed({
     } catch {
       setLoadError("Erreur reseau lors du chargement.");
     } finally {
+      inFlightRef.current = false;
       setIsLoadingMore(false);
     }
   }, [hasNextPage, isLoadingMore, page, queryString]);

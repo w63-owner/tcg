@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
 import { ListingImageCarousel } from "@/components/listing/listing-image-carousel";
 import { ListingMediaActions } from "@/components/listing/listing-media-actions";
+import { DeleteListingButton } from "@/components/listing/delete-listing-button";
 import { PriceHistoryCard } from "@/components/listing/price-history-card";
-import { deleteListingAction, startCheckoutAction, updateListingPriceAction } from "./actions";
+import { startCheckoutAction, updateListingPriceAction } from "./actions";
 import { ListingErrorToast } from "./listing-error-toast";
 import { createConversationForListingAction } from "@/app/messages/actions";
 import { calculateDisplayPrice } from "@/lib/pricing";
@@ -189,50 +190,50 @@ export default async function ListingPage({
 
   let favoriteCount = 0;
   let initialFavorite = false;
-  const { data: favoriteRows } = await supabase
-    .from("favorite_listings")
-    .select("listing_id")
-    .eq("listing_id", listing.id);
-  favoriteCount = (favoriteRows ?? []).length;
-  if (user) {
-    const { data: likedRow } = await supabase
-      .from("favorite_listings")
-      .select("listing_id")
-      .eq("listing_id", listing.id)
-      .eq("user_id", user.id)
-      .maybeSingle();
-    initialFavorite = Boolean(likedRow);
-  }
+  const [favoriteCountResult, likedResult, cardRefResult, historyResult] = await Promise.all([
+    supabase.rpc("get_favorite_listing_counts", {
+      listing_ids: [listing.id],
+    }),
+    user
+      ? supabase
+          .from("favorite_listings")
+          .select("listing_id")
+          .eq("listing_id", listing.id)
+          .eq("user_id", user.id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    listing.card_ref_id
+      ? supabase
+          .from("tcgdex_cards")
+          .select(
+            "card_key,id,name,set_id,set_name,set_card_count_official,set_serie_name,local_id,language,rarity,suffix,regulation_mark,illustrator",
+          )
+          .eq("card_key", listing.card_ref_id)
+          .maybeSingle<CardRefDetailsRow>()
+      : Promise.resolve({ data: null }),
+    listing.card_ref_id
+      ? supabase
+          .from("listings")
+          .select("created_at, display_price, price_seller")
+          .eq("card_ref_id", listing.card_ref_id)
+          .eq("status", "ACTIVE")
+          .order("created_at", { ascending: true })
+          .limit(240)
+      : Promise.resolve({ data: [] as Array<{ created_at: string; display_price: number | null; price_seller: number }> }),
+  ]);
 
-  let cardRef: CardRefDetailsRow | null = null;
-  if (listing.card_ref_id) {
-    const { data: cardRefRow } = await supabase
-      .from("tcgdex_cards")
-      .select(
-        "card_key,id,name,set_id,set_name,set_card_count_official,set_serie_name,local_id,language,rarity,suffix,regulation_mark,illustrator",
-      )
-      .eq("card_key", listing.card_ref_id)
-      .maybeSingle<CardRefDetailsRow>();
-    cardRef = cardRefRow ?? null;
-  }
+  const favoriteCountRow = (favoriteCountResult.data ??
+    []) as Array<{ listing_id: string; favorite_count: number }>;
+  favoriteCount = Number(favoriteCountRow[0]?.favorite_count ?? 0);
+  initialFavorite = Boolean(likedResult.data);
+  const cardRef = (cardRefResult.data as CardRefDetailsRow | null) ?? null;
 
-  let priceHistory: Array<{ date: string; price: number }> = [];
-  if (listing.card_ref_id) {
-    const { data: historyRows } = await supabase
-      .from("listings")
-      .select("created_at, display_price, price_seller")
-      .eq("card_ref_id", listing.card_ref_id)
-      .eq("status", "ACTIVE")
-      .order("created_at", { ascending: true })
-      .limit(240);
-
-    priceHistory = (historyRows ?? [])
-      .map((row) => ({
-        date: row.created_at as string,
-        price: Number(row.display_price ?? calculateDisplayPrice(Number(row.price_seller))),
-      }))
-      .filter((row) => Number.isFinite(row.price) && row.price > 0);
-  }
+  let priceHistory: Array<{ date: string; price: number }> = (historyResult.data ?? [])
+    .map((row) => ({
+      date: row.created_at as string,
+      price: Number(row.display_price ?? calculateDisplayPrice(Number(row.price_seller))),
+    }))
+    .filter((row) => Number.isFinite(row.price) && row.price > 0);
 
   if (priceHistory.length === 0) {
     priceHistory = [
@@ -501,12 +502,7 @@ export default async function ListingPage({
             <Button asChild variant="secondary" className="h-12 w-full">
               <Link href={`/listing/${listing.id}?edit=1`}>Modifier</Link>
             </Button>
-            <form action={deleteListingAction}>
-              <input type="hidden" name="listing_id" value={listing.id} />
-              <Button type="submit" variant="destructive" className="h-12 w-full">
-                Supprimer
-              </Button>
-            </form>
+            <DeleteListingButton listingId={listing.id} />
           </div>
         </div>
       ) : null}

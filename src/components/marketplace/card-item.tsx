@@ -59,6 +59,8 @@ export function CardItem({
               alt={title}
               width={480}
               height={640}
+              sizes="(max-width: 768px) 50vw, (max-width: 1280px) 25vw, 20vw"
+              quality={70}
               className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
             />
           ) : (

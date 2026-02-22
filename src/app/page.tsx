@@ -9,7 +9,8 @@ import { InfiniteListingsFeed } from "@/components/marketplace/infinite-listings
 import { PullToRefresh } from "@/components/marketplace/pull-to-refresh";
 import { HomeAttributeFilters } from "@/components/marketplace/home-attribute-filters";
 import { MobileStickyHomeFilters } from "@/components/marketplace/mobile-sticky-home-filters";
-import { fetchListingsFeedPage, fetchSetOptions, parseFeedFilters } from "@/lib/listings/feed";
+import { parseFeedFilters } from "@/lib/listings/feed";
+import { getPublicFeedCached, getPublicSetOptionsCached } from "@/lib/listings/feed-cache";
 
 type HomeProps = {
   searchParams: Promise<{
@@ -57,27 +58,30 @@ export default async function Home({ searchParams }: HomeProps) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const [favoriteRowsResult, setOptions, feedResult] = await Promise.all([
-    user
-      ? supabase
-          .from("favorite_listings")
-          .select("listing_id")
-          .eq("user_id", user.id)
-      : Promise.resolve({ data: [] as Array<{ listing_id: string }> }),
-    fetchSetOptions(supabase),
-    fetchListingsFeedPage({
-      supabase,
+  const [setOptions, feedResult] = await Promise.all([
+    getPublicSetOptionsCached(),
+    getPublicFeedCached({
       filters,
       page: 1,
       pageSize,
     }),
   ]);
-  const favoriteListingIds = new Set(
-    (favoriteRowsResult.data ?? []).map((row) => row.listing_id),
-  );
+
   const listings = feedResult.listings;
   const hasNextPage = feedResult.hasNextPage;
   const error = feedResult.error ? { message: feedResult.error } : null;
+  const listingIds = listings.map((listing) => listing.id);
+  const favoriteListingIds = new Set<string>();
+  if (user && listingIds.length > 0) {
+    const { data: favoriteRows } = await supabase
+      .from("favorite_listings")
+      .select("listing_id")
+      .eq("user_id", user.id)
+      .in("listing_id", listingIds);
+    for (const row of favoriteRows ?? []) {
+      favoriteListingIds.add(row.listing_id);
+    }
+  }
 
   const currentSearchParams = JSON.stringify({
     q: query || undefined,
@@ -107,44 +111,6 @@ export default async function Home({ searchParams }: HomeProps) {
       [string, string]
     >,
   ).toString()}`;
-
-  const baseParams = Object.fromEntries(
-    Object.entries(params).filter(([, value]) => typeof value === "string"),
-  ) as Record<string, string>;
-  delete baseParams.page;
-
-  const buildHref = (
-    updates: Partial<Record<string, string>>,
-    removedKeys: string[] = [],
-  ) => {
-    const draft = { ...baseParams };
-    removedKeys.forEach((key) => delete draft[key]);
-    Object.entries(updates).forEach(([key, value]) => {
-      if (!value?.trim()) {
-        delete draft[key];
-      } else {
-        draft[key] = value;
-      }
-    });
-    const qs = new URLSearchParams(draft).toString();
-    return qs ? `/?${qs}` : "/";
-  };
-  const buildEditorHref = (
-    updates: Partial<Record<string, string>>,
-    removedKeys: string[] = [],
-  ) => {
-    const draft = { ...baseParams };
-    removedKeys.forEach((key) => delete draft[key]);
-    Object.entries(updates).forEach(([key, value]) => {
-      if (!value?.trim()) {
-        delete draft[key];
-      } else {
-        draft[key] = value;
-      }
-    });
-    const qs = new URLSearchParams(draft).toString();
-    return qs ? `/search?${qs}` : "/search";
-  };
 
   const hasAnyFilter = Boolean(
     query ||

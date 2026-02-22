@@ -14,9 +14,17 @@ export type ListingFeedRow = {
   favorite_count: number;
 };
 
+type FeedPerformance = {
+  cardFilterMs: number;
+  listingQueryMs: number;
+  postProcessMs: number;
+  totalMs: number;
+};
+
 type ListingFeedBaseRow = Omit<ListingFeedRow, "favorite_count" | "language"> & {
   card_ref_id: string | null;
   created_at: string;
+  tcgdex_cards?: { language: string | null } | Array<{ language: string | null }> | null;
 };
 
 export type FeedFilters = {
@@ -85,6 +93,8 @@ export async function fetchListingsFeedPage(params: {
   pageSize: number;
 }) {
   const { supabase, filters, page, pageSize } = params;
+  const totalStart = performance.now();
+  const cardFilterStart = performance.now();
 
   const pageNumber = Math.max(1, Number(page) || 1);
   const rangeFrom = (pageNumber - 1) * pageSize;
@@ -106,14 +116,26 @@ export async function fetchListingsFeedPage(params: {
     const { data: cardRefs } = await cardRefRequest.limit(2000);
     cardRefIds = (cardRefs ?? []).map((row) => row.card_key);
     if (cardRefIds.length === 0) {
-      return { listings: [] as ListingFeedRow[], hasNextPage: false, error: null };
+      return {
+        listings: [] as ListingFeedRow[],
+        hasNextPage: false,
+        error: null,
+        performance: {
+          cardFilterMs: Number((performance.now() - cardFilterStart).toFixed(1)),
+          listingQueryMs: 0,
+          postProcessMs: 0,
+          totalMs: Number((performance.now() - totalStart).toFixed(1)),
+        } satisfies FeedPerformance,
+      };
     }
   }
+  const cardFilterMs = performance.now() - cardFilterStart;
+  const listingQueryStart = performance.now();
 
   let request = supabase
     .from("listings")
     .select(
-      "id, title, cover_image_url, price_seller, display_price, condition, is_graded, grading_company, grade_note, card_ref_id, created_at",
+      "id, title, cover_image_url, price_seller, display_price, condition, is_graded, grading_company, grade_note, card_ref_id, created_at, tcgdex_cards:card_ref_id(language)",
     )
     .eq("status", "ACTIVE");
   let tieBreakAscending = false;
@@ -173,39 +195,55 @@ export async function fetchListingsFeedPage(params: {
 
   request = request.range(rangeFrom, rangeTo);
   const { data, error } = await request;
+  const listingQueryMs = performance.now() - listingQueryStart;
   if (error) {
-    return { listings: [] as ListingFeedRow[], hasNextPage: false, error: error.message };
+    return {
+      listings: [] as ListingFeedRow[],
+      hasNextPage: false,
+      error: error.message,
+      performance: {
+        cardFilterMs: Number(cardFilterMs.toFixed(1)),
+        listingQueryMs: Number(listingQueryMs.toFixed(1)),
+        postProcessMs: 0,
+        totalMs: Number((performance.now() - totalStart).toFixed(1)),
+      } satisfies FeedPerformance,
+    };
   }
 
+  const postProcessStart = performance.now();
   const rows = (data ?? []) as ListingFeedBaseRow[];
   const hasNextPage = rows.length > pageSize;
   const pageRows = rows.slice(0, pageSize);
-  const pageCardRefIds = Array.from(
-    new Set(pageRows.map((row) => row.card_ref_id).filter(Boolean) as string[]),
-  );
-  const languageByCardRefId = new Map<string, string | null>();
 
   const favoriteCountsByListingId = new Map<string, number>();
   if (pageRows.length > 0) {
-    const [favoriteResult, languageResult] = await Promise.all([
-      supabase
+    const listingIds = pageRows.map((row) => row.id);
+    const { data: favoriteCountRows, error: favoriteCountError } = await supabase.rpc(
+      "get_favorite_listing_counts",
+      {
+        listing_ids: listingIds,
+      },
+    );
+
+    if (!favoriteCountError) {
+      for (const row of (favoriteCountRows ??
+        []) as Array<{ listing_id: string; favorite_count: number }>) {
+        favoriteCountsByListingId.set(row.listing_id, Number(row.favorite_count) || 0);
+      }
+    } else {
+      const { data: favoriteRows } = await supabase
         .from("favorite_listings")
         .select("listing_id")
-        .in("listing_id", pageRows.map((row) => row.id)),
-      pageCardRefIds.length > 0
-        ? supabase.from("tcgdex_cards").select("card_key, language").in("card_key", pageCardRefIds)
-        : Promise.resolve({ data: [] as Array<{ card_key: string; language: string | null }> }),
-    ]);
-
-    for (const row of favoriteResult.data ?? []) {
-      const key = row.listing_id as string;
-      favoriteCountsByListingId.set(key, (favoriteCountsByListingId.get(key) ?? 0) + 1);
-    }
-    for (const row of languageResult.data ?? []) {
-      languageByCardRefId.set(String((row as { card_key?: string }).card_key ?? ""), row.language ?? null);
+        .in("listing_id", listingIds);
+      for (const row of favoriteRows ?? []) {
+        const key = row.listing_id as string;
+        favoriteCountsByListingId.set(key, (favoriteCountsByListingId.get(key) ?? 0) + 1);
+      }
     }
   }
 
+  const postProcessMs = performance.now() - postProcessStart;
+  const totalMs = performance.now() - totalStart;
   return {
     listings: pageRows.map((row) => ({
       id: row.id,
@@ -217,10 +255,18 @@ export async function fetchListingsFeedPage(params: {
       is_graded: row.is_graded,
       grading_company: row.grading_company,
       grade_note: row.grade_note,
-      language: row.card_ref_id ? (languageByCardRefId.get(row.card_ref_id) ?? null) : null,
+      language: Array.isArray(row.tcgdex_cards)
+        ? (row.tcgdex_cards[0]?.language ?? null)
+        : (row.tcgdex_cards?.language ?? null),
       favorite_count: favoriteCountsByListingId.get(row.id) ?? 0,
     })),
     hasNextPage,
     error: null,
+    performance: {
+      cardFilterMs: Number(cardFilterMs.toFixed(1)),
+      listingQueryMs: Number(listingQueryMs.toFixed(1)),
+      postProcessMs: Number(postProcessMs.toFixed(1)),
+      totalMs: Number(totalMs.toFixed(1)),
+    } satisfies FeedPerformance,
   };
 }

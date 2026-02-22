@@ -89,7 +89,7 @@ export async function createListingAction(
     }
 
     const title = String(formData.get("title") ?? "").trim();
-    const priceSeller = Number(formData.get("price_seller") ?? 0);
+    const displayPriceInput = Number(formData.get("price_seller") ?? 0);
     const deliveryWeightClass = String(
       formData.get("delivery_weight_class") ?? "S",
     ).toUpperCase();
@@ -119,24 +119,29 @@ export async function createListingAction(
       };
     }
 
-    if (!Number.isFinite(priceSeller) || priceSeller <= 0) {
+    if (!Number.isFinite(displayPriceInput) || displayPriceInput <= 0) {
       return {
         status: "error",
-        message: "Le prix vendeur doit etre superieur a 0.",
+        message: "Le prix affiche doit etre superieur a 0.",
       };
     }
+
+    const priceSeller = Math.max(
+      0.01,
+      Math.round(((displayPriceInput - 0.7) / 1.05) * 100) / 100,
+    );
 
     if (!(frontImage instanceof File) || frontImage.size === 0) {
       return {
         status: "error",
-        message: "La photo recto est obligatoire.",
+        message: "Photo recto manquante. Reprends la capture ou importe une image.",
       };
     }
 
     if (!(backImage instanceof File) || backImage.size === 0) {
       return {
         status: "error",
-        message: "La photo verso est obligatoire.",
+        message: "Photo verso manquante. Reprends la capture ou importe une image.",
       };
     }
 
@@ -203,7 +208,7 @@ export async function createListingAction(
     if (error) {
       return {
         status: "error",
-        message: `Impossible de creer l'annonce: ${error.message}`,
+        message: "Impossible de publier l'annonce. Corrige le prix puis retente.",
       };
     }
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { logError, logInfo } from "@/lib/observability";
+import { logPerf, toServerTimingHeader } from "@/lib/perf/timing";
 import { detectCardTextFromImage } from "@/lib/ocr/provider";
 import { lookupTcgdexCandidates } from "@/lib/cards/tcgdex-lookup";
 import {
@@ -163,23 +164,36 @@ function parseFromStructuredOutput(
 }
 
 export async function POST(request: Request) {
+  const startedAt = performance.now();
+  const send = (
+    body: Record<string, unknown>,
+    init?: ResponseInit,
+    timings?: Array<{ label: string; durationMs: number }>,
+  ) => {
+    const response = NextResponse.json(body, init);
+    const totalMs = performance.now() - startedAt;
+    const entries = [...(timings ?? []), { label: "total", durationMs: totalMs }];
+    response.headers.set("Server-Timing", toServerTimingHeader(entries));
+    return response;
+  };
+
   try {
     const formData = await request.formData();
     const image = formData.get("image");
 
     if (!(image instanceof File)) {
-      return NextResponse.json({ error: "Image file is required" }, { status: 400 });
+      return send({ error: "Image file is required" }, { status: 400 });
     }
 
     if (image.size === 0 || image.size > MAX_IMAGE_BYTES) {
-      return NextResponse.json(
+      return send(
         { error: "Image size must be between 1 byte and 8 MB" },
         { status: 400 },
       );
     }
 
     if (!image.type.startsWith("image/")) {
-      return NextResponse.json({ error: "Invalid file type" }, { status: 400 });
+      return send({ error: "Invalid file type" }, { status: 400 });
     }
 
     const supabase = await createClient();
@@ -187,10 +201,13 @@ export async function POST(request: Request) {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return send({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const ocrStart = performance.now();
     const ocrResult = await detectCardTextFromImage(image);
+    const ocrMs = performance.now() - ocrStart;
+    const lookupStart = performance.now();
     const parsed = parseFromStructuredOutput(ocrResult.structured) ?? parseCardParameters(ocrResult.rawText);
     const lookupTerms = buildLookupTerms(parsed, ocrResult.rawText)
       .map(sanitizeLookupToken)
@@ -314,6 +331,7 @@ export async function POST(request: Request) {
         }
       }
     }
+    const lookupMs = performance.now() - lookupStart;
 
     const localRank = rankCardRefCandidates({
       parsed,
@@ -468,7 +486,13 @@ export async function POST(request: Request) {
       },
     });
 
-    return NextResponse.json({
+    logPerf("api.ocr.card.timings", [
+      { label: "ocr", durationMs: ocrMs },
+      { label: "lookup", durationMs: lookupMs },
+      { label: "total", durationMs: performance.now() - startedAt },
+    ]);
+
+    return send({
       ok: true,
       matchMode,
       attemptId: attemptRow?.id ?? null,
@@ -485,14 +509,17 @@ export async function POST(request: Request) {
         parsed.estimatedCondition ? "condition_hint_detected" : "condition_hint_missing",
         candidates.length > 0 ? "catalog_match_found" : "catalog_match_missing",
       ],
-    });
+    }, undefined, [
+      { label: "ocr", durationMs: ocrMs },
+      { label: "lookup", durationMs: lookupMs },
+    ]);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unexpected error";
     logError({
       event: "ocr_card_route_exception",
       message,
     });
-    return NextResponse.json({ error: toClientOcrErrorMessage(message) }, { status: 500 });
+    return send({ error: toClientOcrErrorMessage(message) }, { status: 500 });
   }
 }
 
