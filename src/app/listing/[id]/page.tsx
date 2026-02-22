@@ -15,6 +15,8 @@ import { formatConditionLabel } from "@/lib/listings/condition-label";
 type ListingDetailsRow = {
   id: string;
   card_ref_id: string | null;
+  card_series: string | null;
+  card_block: string | null;
   title: string;
   seller_id: string;
   price_seller: number;
@@ -30,22 +32,19 @@ type ListingDetailsRow = {
 };
 
 type CardRefDetailsRow = {
+  card_key: string;
   id: string;
   name: string;
-  setId: string | null;
-  tcgId: string | null;
-  localId: string | null;
+  set_id: string | null;
+  set_name: string | null;
+  set_card_count_official: number | null;
+  set_serie_name: string | null;
+  local_id: string | null;
   language: string | null;
-  hp: number | null;
   rarity: string | null;
-  finish: string | null;
-  is_secret: boolean | null;
-  is_promo: boolean | null;
-  vintage_hint: string | null;
-  regulationMark: string | null;
+  suffix: string | null;
+  regulation_mark: string | null;
   illustrator: string | null;
-  estimated_condition: string | null;
-  releaseYear: number | null;
 };
 
 const SET_CODE_LABELS: Record<string, string> = {
@@ -89,6 +88,15 @@ function formatSetLabel(setValue?: string | null) {
     .replace(/[_-]+/g, " ")
     .toLowerCase()
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatCardNumber(localId?: string | null, officialCount?: number | null) {
+  const local = String(localId ?? "").trim();
+  if (!local) return "-";
+  if (typeof officialCount === "number" && Number.isFinite(officialCount) && officialCount > 0) {
+    return `${local}/${officialCount}`;
+  }
+  return local;
 }
 
 function formatFinishLabel(value?: string | null) {
@@ -170,7 +178,7 @@ export default async function ListingPage({
   const { data: listing, error } = await supabase
     .from("listings")
     .select(
-      "id, card_ref_id, title, seller_id, price_seller, display_price, condition, is_graded, grading_company, grade_note, status, cover_image_url, back_image_url, created_at",
+      "id, card_ref_id, card_series, card_block, title, seller_id, price_seller, display_price, condition, is_graded, grading_company, grade_note, status, cover_image_url, back_image_url, created_at",
     )
     .eq("id", id)
     .single<ListingDetailsRow>();
@@ -199,11 +207,11 @@ export default async function ListingPage({
   let cardRef: CardRefDetailsRow | null = null;
   if (listing.card_ref_id) {
     const { data: cardRefRow } = await supabase
-      .from("cards_ref")
+      .from("tcgdex_cards")
       .select(
-        "id, name, setId, tcgId, localId, language, hp, rarity, finish, is_secret, is_promo, vintage_hint, regulationMark, illustrator, estimated_condition, releaseYear",
+        "card_key,id,name,set_id,set_name,set_card_count_official,set_serie_name,local_id,language,rarity,suffix,regulation_mark,illustrator",
       )
-      .eq("id", listing.card_ref_id)
+      .eq("card_key", listing.card_ref_id)
       .maybeSingle<CardRefDetailsRow>();
     cardRef = cardRefRow ?? null;
   }
@@ -358,7 +366,7 @@ export default async function ListingPage({
                   <div>
                     <p className="text-muted-foreground text-xs">Etat estime</p>
                     <p className="text-sm">
-                      {cardRef ? formatConditionUserLabel(cardRef.estimated_condition) : "-"}
+                      -
                     </p>
                   </div>
                 </>
@@ -379,20 +387,26 @@ export default async function ListingPage({
                 </p>
                 <div className="grid grid-cols-2 gap-x-3 gap-y-2">
                   <div>
-                    <p className="text-muted-foreground text-xs">Set</p>
-                    <p className="text-sm">{formatSetLabel(cardRef.setId)}</p>
+                    <p className="text-muted-foreground text-xs">Série</p>
+                    <p className="text-sm">
+                      {cardRef.set_name || listing.card_series || formatSetLabel(cardRef.set_id)}
+                    </p>
                   </div>
                   <div>
                     <p className="text-muted-foreground text-xs">Numero</p>
-                    <p className="text-sm">{cardRef.localId || "-"}</p>
+                    <p className="text-sm">
+                      {formatCardNumber(cardRef.local_id, cardRef.set_card_count_official)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs">Bloc</p>
+                    <p className="text-sm">
+                      {cardRef.set_serie_name || listing.card_block || "-"}
+                    </p>
                   </div>
                   <div>
                     <p className="text-muted-foreground text-xs">Langue</p>
                     <p className="text-sm">{cardRef.language ? cardRef.language.toUpperCase() : "-"}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground text-xs">HP</p>
-                    <p className="text-sm">{cardRef.hp ?? "-"}</p>
                   </div>
                   <div>
                     <p className="text-muted-foreground text-xs">Rarete</p>
@@ -400,7 +414,7 @@ export default async function ListingPage({
                   </div>
                   <div>
                     <p className="text-muted-foreground text-xs">Finition</p>
-                    <p className="text-sm">{formatFinishLabel(cardRef.finish)}</p>
+                    <p className="text-sm">{formatFinishLabel(cardRef.suffix)}</p>
                   </div>
                 </div>
               </section>
@@ -411,32 +425,16 @@ export default async function ListingPage({
                 </p>
                 <div className="grid grid-cols-2 gap-x-3 gap-y-2">
                   <div>
-                    <p className="text-muted-foreground text-xs">Secret</p>
-                    <p className="text-sm">{cardRef.is_secret === null ? "-" : cardRef.is_secret ? "Oui" : "Non"}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground text-xs">Promo</p>
-                    <p className="text-sm">{cardRef.is_promo === null ? "-" : cardRef.is_promo ? "Oui" : "Non"}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground text-xs">Vintage</p>
-                    <p className="text-sm">{cardRef.vintage_hint || "-"}</p>
-                  </div>
-                  <div>
                     <p className="text-muted-foreground text-xs">Regulation</p>
-                    <p className="text-sm">{cardRef.regulationMark || "-"}</p>
+                    <p className="text-sm">{cardRef.regulation_mark || "-"}</p>
                   </div>
                   <div>
                     <p className="text-muted-foreground text-xs">Illustrateur</p>
                     <p className="text-sm">{cardRef.illustrator || "-"}</p>
                   </div>
-                  <div>
-                    <p className="text-muted-foreground text-xs">Annee</p>
-                    <p className="text-sm">{cardRef.releaseYear ?? "-"}</p>
-                  </div>
                   <div className="col-span-2">
                     <p className="text-muted-foreground text-xs">Ref. collection</p>
-                    <p className="text-sm">{cardRef.tcgId || cardRef.id}</p>
+                    <p className="text-sm">{cardRef.id}</p>
                   </div>
                 </div>
               </section>

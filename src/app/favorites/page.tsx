@@ -171,15 +171,15 @@ async function countNewListingsForSavedSearch(
 
   let cardRefIds: string[] | null = null;
   if (setFilter || rarityFilter) {
-    let cardRefRequest = supabase.from("cards_ref").select("id");
+    let cardRefRequest = supabase.from("tcgdex_cards").select("card_key");
     if (setFilter) {
-      cardRefRequest = cardRefRequest.eq("setId", setFilter);
+      cardRefRequest = cardRefRequest.eq("set_name", setFilter);
     }
     if (rarityFilter) {
       cardRefRequest = cardRefRequest.eq("rarity", rarityFilter);
     }
     const { data: cardRefs } = await cardRefRequest.limit(2000);
-    cardRefIds = (cardRefs ?? []).map((card) => card.id);
+    cardRefIds = (cardRefs ?? []).map((card) => card.card_key);
     if (cardRefIds.length === 0) return 0;
   }
 

@@ -1,9 +1,9 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useActionState, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowLeft, Camera, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Camera } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import { Input } from "@/components/ui/input";
@@ -34,24 +34,6 @@ const CONDITIONS = [
 ] as const;
 
 const GRADING_COMPANIES = ["PSA", "PCA", "BGS", "CGC", "SGC", "ACE", "OTHER"] as const;
-const RARITY_OPTIONS = [
-  "COMMON",
-  "UNCOMMON",
-  "RARE",
-  "HOLO",
-  "ULTRA_RARE",
-  "SECRET_RARE",
-  "PROMO",
-] as const;
-const FINISH_OPTIONS = [
-  { value: "NON_HOLO", label: "Non holo" },
-  { value: "HOLO", label: "Holo" },
-  { value: "REVERSE_HOLO", label: "Reverse holo" },
-  { value: "FULL_ART", label: "Full art" },
-  { value: "TEXTURED", label: "Texturee" },
-  { value: "COSMOS", label: "Cosmos" },
-  { value: "CRACKED_ICE", label: "Cracked ice" },
-] as const;
 
 const SET_CODE_LABELS: Record<string, string> = {
   BASE1: "Set de Base",
@@ -84,10 +66,73 @@ function formatSetLabel(setValue?: string) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function resolveDisplayedSetNumber(candidateCardNumber?: string | null) {
-  const candidate = String(candidateCardNumber ?? "").trim();
+function resolveDisplayedSetNumber(params: {
+  candidateCardNumber?: string | null;
+  localId?: string | null;
+  official?: number | null;
+}) {
+  const localId = String(params.localId ?? "").trim();
+  const official = params.official ?? null;
+  if (localId) {
+    if (typeof official === "number" && Number.isFinite(official) && official > 0) {
+      return `${localId}/${official}`;
+    }
+    return localId;
+  }
+
+  const candidate = String(params.candidateCardNumber ?? "").trim();
   if (candidate) return candidate;
   return "-";
+}
+
+function resolveDisplayedCardNumberForInput(params: {
+  localId?: string | null;
+  official?: number | null;
+  fallback?: string | null;
+}) {
+  const localId = String(params.localId ?? "").trim();
+  const official = params.official ?? null;
+  if (localId) {
+    if (typeof official === "number" && Number.isFinite(official) && official > 0) {
+      return `${localId}/${official}`;
+    }
+    return localId;
+  }
+  const fallback = String(params.fallback ?? "").trim();
+  return fallback;
+}
+
+function resolveCandidateBlockValue(candidate: OcrCandidate) {
+  const serieName = String(candidate.setDetails?.serie?.name ?? "").trim();
+  if (serieName) return serieName;
+  const series = String(candidate.setDetails?.series ?? "").trim();
+  if (series) return series;
+  const setId = String(candidate.setDetails?.id ?? "").trim();
+  if (setId) return setId;
+  const seriesId = String(candidate.setDetails?.seriesId ?? "").trim();
+  if (seriesId) return seriesId;
+  return String(candidate.set ?? "").trim();
+}
+
+function resolveCandidateSeriesValue(candidate: OcrCandidate) {
+  const setName = String(candidate.setDetails?.name ?? "").trim();
+  if (setName) return setName;
+  return formatSetLabel(candidate.set);
+}
+
+function centerCandidateCard(element: HTMLButtonElement) {
+  const scroller = element.parentElement;
+  if (!scroller) return;
+  const targetLeft = element.offsetLeft - (scroller.clientWidth - element.clientWidth) / 2;
+  scroller.scrollTo({
+    left: Math.max(0, targetLeft),
+    behavior: "smooth",
+  });
+  element.scrollIntoView({
+    behavior: "smooth",
+    block: "center",
+    inline: "nearest",
+  });
 }
 
 type OcrCandidate = {
@@ -106,6 +151,10 @@ type OcrCandidate = {
     name?: string | null;
     series?: string | null;
     seriesId?: string | null;
+    serie?: {
+      id?: string | null;
+      name?: string | null;
+    } | null;
     symbol?: string | null;
   } | null;
   variants?: {
@@ -148,6 +197,16 @@ type OcrParsed = {
   estimatedCondition?: (typeof CONDITIONS)[number];
 };
 
+type CardFieldSuggestions = {
+  names: string[];
+  sets: string[];
+  numbers: string[];
+  languages: string[];
+  rarities: string[];
+  finishes: string[];
+  hps: string[];
+};
+
 function mapGradeToCondition(grade: number) {
   if (grade >= 10) return "MINT";
   if (grade >= 9) return "NEAR_MINT";
@@ -156,12 +215,6 @@ function mapGradeToCondition(grade: number) {
   if (grade >= 6) return "LIGHT_PLAYED";
   if (grade >= 4) return "PLAYED";
   return "POOR";
-}
-
-function isUuid(value: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    value,
-  );
 }
 
 export function SellForm() {
@@ -175,10 +228,10 @@ export function SellForm() {
   const [conditionValue, setConditionValue] = useState("NEAR_MINT");
   const [gradingCompanyValue, setGradingCompanyValue] = useState("PSA");
   const [cardNameValue, setCardNameValue] = useState("");
+  const [cardSeriesValue, setCardSeriesValue] = useState("");
   const [cardSetValue, setCardSetValue] = useState("");
   const [cardNumberValue, setCardNumberValue] = useState("");
   const [cardLanguageValue, setCardLanguageValue] = useState<"" | "fr" | "en" | "jp">("");
-  const [cardHpValue, setCardHpValue] = useState("");
   const [cardRarityValue, setCardRarityValue] = useState("");
   const [cardFinishValue, setCardFinishValue] = useState("");
   const [hasSubmittedCurrentFlow, setHasSubmittedCurrentFlow] = useState(false);
@@ -199,12 +252,24 @@ export function SellForm() {
   const [ocrParsed, setOcrParsed] = useState<OcrParsed | null>(null);
   const [ocrError, setOcrError] = useState("");
   const [isOcrLoading, setIsOcrLoading] = useState(false);
+  const [hasOcrResult, setHasOcrResult] = useState(false);
   const [validatedCandidatePayload, setValidatedCandidatePayload] = useState("");
   const [isCatalogCandidateValidated, setIsCatalogCandidateValidated] = useState(false);
+  const [cardFieldSuggestions, setCardFieldSuggestions] = useState<CardFieldSuggestions>({
+    names: [],
+    sets: [],
+    numbers: [],
+    languages: ["FR", "EN", "JP"],
+    rarities: [],
+    finishes: [],
+    hps: [],
+  });
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const frontPreviewUrlRef = useRef<string | null>(null);
   const backPreviewUrlRef = useRef<string | null>(null);
+  const frontFileRef = useRef<File | null>(null);
+  const backFileRef = useRef<File | null>(null);
   const frontInputRef = useRef<HTMLInputElement | null>(null);
   const backInputRef = useRef<HTMLInputElement | null>(null);
   const [state, formAction, isPending] = useActionState(
@@ -220,31 +285,6 @@ export function SellForm() {
   const effectiveTitleValue = cardNameValue.trim() || titleValue.trim();
   const previewDisplayPrice =
     previewPrice > 0 ? Math.round((previewPrice * 1.05 + 0.7) * 100) / 100 : 0;
-  const cardSetOptions = useMemo(() => {
-    const base = Object.keys(SET_CODE_LABELS).map((code) => ({
-      value: code,
-      label: formatSetLabel(code),
-    }));
-    const current = cardSetValue.trim();
-    if (
-      current &&
-      !base.some((option) => option.value.toLowerCase() === current.toLowerCase())
-    ) {
-      base.unshift({ value: current, label: formatSetLabel(current) });
-    }
-    return base;
-  }, [cardSetValue]);
-  const cardRarityOptions = useMemo(() => {
-    const base: Array<{ value: string; label: string }> = [...RARITY_OPTIONS].map((value) => ({
-      value,
-      label: value.replace(/_/g, " "),
-    }));
-    const current = cardRarityValue.trim().toUpperCase();
-    if (current && !base.some((option) => option.value === current)) {
-      base.unshift({ value: current, label: current.replace(/_/g, " ") });
-    }
-    return base;
-  }, [cardRarityValue]);
   const selectedOcrCandidate = useMemo(
     () => ocrCandidates.find((candidate) => candidate.cardRefId === ocrSelectedCardRefId) ?? null,
     [ocrCandidates, ocrSelectedCardRefId],
@@ -258,7 +298,7 @@ export function SellForm() {
     [frontPreviewUrl, backPreviewUrl],
   );
   const hasResolvedMatchDecision = matchDecision !== "pending";
-  const selectedCardRefIdForSubmit = isUuid(ocrSelectedCardRefId) ? ocrSelectedCardRefId : "";
+  const selectedCardRefIdForSubmit = String(ocrSelectedCardRefId ?? "").trim();
 
   const steps = [
     { number: 1, label: "Photos" },
@@ -270,6 +310,42 @@ export function SellForm() {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (step !== 3) return;
+    let cancelled = false;
+    const q = cardNameValue.trim();
+    const timer = window.setTimeout(async () => {
+      try {
+        const search = q ? `?q=${encodeURIComponent(q)}` : "";
+        const response = await fetch(`/api/cards/suggestions${search}`, { cache: "no-store" });
+        if (!response.ok) return;
+        const json = (await response.json()) as {
+          suggestions?: Partial<CardFieldSuggestions>;
+        };
+        if (cancelled) return;
+        setCardFieldSuggestions((previous) => ({
+          names: json.suggestions?.names ?? previous.names,
+          sets: json.suggestions?.sets ?? previous.sets,
+          numbers: json.suggestions?.numbers ?? previous.numbers,
+          languages:
+            json.suggestions?.languages && json.suggestions.languages.length > 0
+              ? json.suggestions.languages
+              : previous.languages,
+          rarities: json.suggestions?.rarities ?? previous.rarities,
+          finishes: json.suggestions?.finishes ?? previous.finishes,
+          hps: json.suggestions?.hps ?? previous.hps,
+        }));
+      } catch {
+        // Best effort suggestions only.
+      }
+    }, 220);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [step, cardNameValue]);
 
   useEffect(() => {
     if (step !== 1) return;
@@ -358,21 +434,12 @@ export function SellForm() {
   const runOcrDetection = async (file: File) => {
     if (isOcrLoading) return;
     setIsOcrLoading(true);
+    setHasOcrResult(false);
     setMatchDecision("pending");
+    setOcrSelectedCardRefId("");
+    setIsCatalogCandidateValidated(false);
+    setValidatedCandidatePayload("");
     setOcrError("");
-
-    const syncOcrSelection = async (attemptId: string, selectedCardRefId: string) => {
-      if (!attemptId || !selectedCardRefId) return;
-      try {
-        await fetch("/api/ocr/card/selection", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ attemptId, selectedCardRefId }),
-        });
-      } catch {
-        // Best-effort analytics update only.
-      }
-    };
 
     try {
       const payload = new FormData();
@@ -392,27 +459,20 @@ export function SellForm() {
 
       if (!response.ok) {
         setOcrError(json.error ?? "OCR indisponible.");
+        setHasOcrResult(true);
         return;
       }
 
       const candidates = Array.isArray(json.candidates) ? json.candidates : [];
-      const top = candidates[0];
       const attemptId = json.attemptId ?? "";
       setOcrCandidates(candidates);
       setOcrParsed(json.parsed ?? null);
       setOcrAttemptId(attemptId);
-
-      if (top) {
-        setOcrSelectedCardRefId(top.cardRefId);
-        setIsCatalogCandidateValidated(false);
-        setValidatedCandidatePayload("");
-        if (isUuid(top.cardRefId)) {
-          void syncOcrSelection(attemptId, top.cardRefId);
-        }
-      }
+      setHasOcrResult(true);
 
     } catch {
       setOcrError("OCR indisponible pour le moment.");
+      setHasOcrResult(true);
     } finally {
       setIsOcrLoading(false);
     }
@@ -428,11 +488,13 @@ export function SellForm() {
 
   const updateSidePreview = (side: "front" | "back", file: File | null) => {
     if (side === "front") {
+      frontFileRef.current = file;
       if (frontPreviewUrl) URL.revokeObjectURL(frontPreviewUrl);
       setFrontPreviewUrl(file ? URL.createObjectURL(file) : null);
       setFrontSelected(Boolean(file));
       return;
     }
+    backFileRef.current = file;
     if (backPreviewUrl) URL.revokeObjectURL(backPreviewUrl);
     setBackPreviewUrl(file ? URL.createObjectURL(file) : null);
     setBackSelected(Boolean(file));
@@ -508,14 +570,20 @@ export function SellForm() {
 
   const applyCardDetailsFromCandidate = (candidate: OcrCandidate) => {
     setCardNameValue(candidate.name || "");
-    setCardSetValue(candidate.set || "");
-    setCardNumberValue(candidate.cardNumber || "");
+    setCardSeriesValue(resolveCandidateSeriesValue(candidate));
+    setCardSetValue(resolveCandidateBlockValue(candidate));
+    setCardNumberValue(
+      resolveDisplayedCardNumberForInput({
+        localId: candidate.cardNumber,
+        official: candidate.setDetails?.cardCount?.official,
+        fallback: candidate.cardNumber,
+      }),
+    );
     setCardLanguageValue(
       candidate.language && ["fr", "en", "jp"].includes(candidate.language.toLowerCase())
         ? (candidate.language.toLowerCase() as "fr" | "en" | "jp")
         : "",
     );
-    setCardHpValue(candidate.hp ? String(candidate.hp) : "");
     setCardRarityValue(candidate.rarity || "");
     setCardFinishValue(candidate.finish || "");
   };
@@ -523,16 +591,12 @@ export function SellForm() {
   const confirmNoCatalogMatch = () => {
     const fallbackCandidate = ocrCandidates[0] ?? null;
     const name = ocrParsed?.name || fallbackCandidate?.name || "";
-    const setValue = ocrParsed?.set || fallbackCandidate?.set || "";
+    const seriesValue =
+      ocrParsed?.set || String(fallbackCandidate?.setDetails?.name ?? "").trim() || fallbackCandidate?.set || "";
+    const blockValue = fallbackCandidate ? resolveCandidateBlockValue(fallbackCandidate) : ocrParsed?.set || "";
     const numberValue = ocrParsed?.cardNumber || fallbackCandidate?.cardNumber || "";
     const languageValue =
       ocrParsed?.language || fallbackCandidate?.language || "";
-    const hpValue =
-      ocrParsed?.hp !== undefined
-        ? String(ocrParsed.hp)
-        : fallbackCandidate?.hp !== undefined && fallbackCandidate?.hp !== null
-          ? String(fallbackCandidate.hp)
-          : "";
     const rarityValue = ocrParsed?.rarity || fallbackCandidate?.rarity || "";
     const finishValue = ocrParsed?.finish || fallbackCandidate?.finish || "";
 
@@ -540,14 +604,14 @@ export function SellForm() {
     setOcrSelectedCardRefId("");
     setTitleValue(name);
     setCardNameValue(name);
-    setCardSetValue(setValue);
+    setCardSeriesValue(seriesValue);
+    setCardSetValue(blockValue);
     setCardNumberValue(numberValue);
     setCardLanguageValue(
       languageValue && ["fr", "en", "jp"].includes(languageValue.toLowerCase())
         ? (languageValue.toLowerCase() as "fr" | "en" | "jp")
         : "",
     );
-    setCardHpValue(hpValue);
     setCardRarityValue(rarityValue);
     setCardFinishValue(finishValue);
     setHasSubmittedCurrentFlow(false);
@@ -665,7 +729,26 @@ export function SellForm() {
               setHasSubmittedCurrentFlow(false);
               return;
             }
+            event.preventDefault();
+            const submitFormData = new FormData(event.currentTarget);
+            const frontEntry = submitFormData.get("front_image");
+            const backEntry = submitFormData.get("back_image");
+            if (
+              (!(frontEntry instanceof File) || frontEntry.size === 0) &&
+              frontFileRef.current
+            ) {
+              submitFormData.set("front_image", frontFileRef.current);
+            }
+            if (
+              (!(backEntry instanceof File) || backEntry.size === 0) &&
+              backFileRef.current
+            ) {
+              submitFormData.set("back_image", backFileRef.current);
+            }
             setHasSubmittedCurrentFlow(true);
+            startTransition(() => {
+              formAction(submitFormData);
+            });
           }}
         >
           <input type="hidden" name="is_graded" value={isGraded ? "on" : ""} />
@@ -680,10 +763,10 @@ export function SellForm() {
           <input type="hidden" name="selected_candidate_payload" value={validatedCandidatePayload} />
           <input type="hidden" name="is_catalog_candidate_validated" value={isCatalogCandidateValidated ? "1" : "0"} />
           <input type="hidden" name="card_name" value={cardNameValue} />
+          <input type="hidden" name="card_series" value={cardSeriesValue} />
           <input type="hidden" name="card_set" value={cardSetValue} />
           <input type="hidden" name="card_number" value={cardNumberValue} />
           <input type="hidden" name="card_language" value={cardLanguageValue} />
-          <input type="hidden" name="card_hp" value={cardHpValue} />
           <input type="hidden" name="card_rarity" value={cardRarityValue} />
           <input type="hidden" name="card_finish" value={cardFinishValue} />
           <div className="hidden">
@@ -694,7 +777,6 @@ export function SellForm() {
               type="file"
               accept="image/*"
               capture="environment"
-              required
               onChange={(event) => {
                 const file = event.target.files?.[0] ?? null;
                 updateSidePreview("front", file);
@@ -707,7 +789,6 @@ export function SellForm() {
               type="file"
               accept="image/*"
               capture="environment"
-              required
               onChange={(event) => {
                 const file = event.target.files?.[0] ?? null;
                 updateSidePreview("back", file);
@@ -721,7 +802,20 @@ export function SellForm() {
                 {ocrError ? (
                   <p className="text-destructive text-xs">{ocrError}</p>
                 ) : null}
-                {isOcrLoading ? (
+                {!hasOcrResult ? (
+                  <div className="h-[calc(100dvh-20rem)] min-h-[500px] flex items-center justify-center">
+                    <div className="flex flex-col items-center gap-4">
+                      <div className="relative h-16 w-16 animate-spin">
+                        <div className="absolute inset-0 rounded-full border border-black bg-white" />
+                        <div className="absolute inset-x-0 top-0 h-1/2 rounded-t-full bg-red-500" />
+                        <div className="absolute inset-x-[2px] top-1/2 h-[3px] -translate-y-1/2 bg-black" />
+                        <div className="absolute top-1/2 left-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-black bg-white" />
+                        <div className="absolute top-1/2 left-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-black" />
+                      </div>
+                      <p className="text-muted-foreground text-xs">Recherche de correspondance...</p>
+                    </div>
+                  </div>
+                ) : isOcrLoading ? (
                   <div className="h-[calc(100dvh-20rem)] min-h-[500px] space-y-2">
                     <div className="hide-scrollbar flex h-full snap-x gap-3 overflow-x-auto pb-1">
                       {[0, 1].map((idx) => (
@@ -755,17 +849,18 @@ export function SellForm() {
                         <button
                           key={candidate.cardRefId}
                           type="button"
-                          className={`w-[min(85vw,360px)] h-full shrink-0 snap-start overflow-hidden rounded-md border text-left transition flex flex-col ${
+                          className={`w-[min(85vw,360px)] h-full shrink-0 snap-center overflow-hidden rounded-md border text-left transition flex flex-col ${
                             ocrSelectedCardRefId === candidate.cardRefId
-                              ? "border-primary bg-primary/5 ring-primary/30 ring-2"
-                              : "border-border"
+                              ? "border-primary bg-primary/10 ring-primary/30 ring-2"
+                              : "border-border bg-background"
                           }`}
-                          onClick={() => {
+                          onClick={(event) => {
                             setOcrSelectedCardRefId(candidate.cardRefId);
                             setMatchDecision("matched");
                             setIsCatalogCandidateValidated(false);
                             setValidatedCandidatePayload("");
-                            if (ocrAttemptId && isUuid(candidate.cardRefId)) {
+                            centerCandidateCard(event.currentTarget);
+                            if (ocrAttemptId && candidate.cardRefId) {
                               void fetch("/api/ocr/card/selection", {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
@@ -776,17 +871,11 @@ export function SellForm() {
                               }).catch(() => undefined);
                             }
                           }}
+                          onFocus={(event) => {
+                            centerCandidateCard(event.currentTarget);
+                          }}
                         >
                           <div className="bg-muted relative aspect-[63/88] w-2/3 shrink-0 self-center rounded-sm">
-                            <span className="bg-background/90 text-foreground absolute top-2 right-2 z-10 rounded-full px-2 py-0.5 text-[11px] font-medium">
-                              {Math.round(candidate.score * 100)}% correspondance
-                            </span>
-                            {ocrSelectedCardRefId === candidate.cardRefId ? (
-                              <span className="bg-primary/90 text-primary-foreground absolute top-2 left-2 z-10 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium">
-                                <CheckCircle2 className="h-3.5 w-3.5" />
-                                Selectionnee
-                              </span>
-                            ) : null}
                             {candidate.imageUrl ? (
                               <Image
                                 src={candidate.imageUrl}
@@ -798,14 +887,19 @@ export function SellForm() {
                             ) : null}
                           </div>
                           <div className="flex-1 space-y-3 overflow-y-auto p-3">
-                            <h3 className="line-clamp-2 text-lg font-semibold tracking-tight">
-                              {candidate.name}
-                            </h3>
+                            <div className="flex items-center justify-between gap-2">
+                              <h3 className="line-clamp-2 text-lg font-semibold tracking-tight">
+                                {candidate.name}
+                              </h3>
+                              <span className="bg-background/90 text-foreground shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium">
+                                {Math.round(candidate.score * 100)}% correspondance
+                              </span>
+                            </div>
 
                             <section className="space-y-2">
                               <div className="grid grid-cols-2 gap-x-3 gap-y-2">
                                 <div>
-                                  <p className="text-muted-foreground text-xs">Bloc</p>
+                                  <p className="text-muted-foreground text-xs">Série</p>
                                   <p className="text-sm">
                                     {candidate.setDetails?.name ||
                                       formatSetLabel(candidate.set) ||
@@ -815,13 +909,19 @@ export function SellForm() {
                                 <div>
                                   <p className="text-muted-foreground text-xs">Set number</p>
                                   <p className="text-sm">
-                                    {resolveDisplayedSetNumber(candidate.cardNumber)}
+                                    {resolveDisplayedSetNumber({
+                                      candidateCardNumber: candidate.cardNumber,
+                                      localId: candidate.cardNumber,
+                                      official: candidate.setDetails?.cardCount?.official,
+                                    })}
                                   </p>
                                 </div>
                                 <div>
-                                  <p className="text-muted-foreground text-xs">Serie</p>
+                                  <p className="text-muted-foreground text-xs">Bloc</p>
                                   <p className="text-sm">
-                                    {candidate.setDetails?.series ||
+                                    {candidate.setDetails?.serie?.name ||
+                                      candidate.setDetails?.series ||
+                                      candidate.setDetails?.id ||
                                       candidate.setDetails?.seriesId ||
                                       "-"}
                                   </p>
@@ -877,28 +977,44 @@ export function SellForm() {
                       placeholder="Ex: Dracaufeu"
                       value={cardNameValue}
                       onChange={(event) => setCardNameValue(event.target.value)}
+                      list="card-name-suggestions"
                       className={FORM_INPUT_CLASS}
                     />
+                    <datalist id="card-name-suggestions">
+                      {cardFieldSuggestions.names.map((value) => (
+                        <option key={value} value={value} />
+                      ))}
+                    </datalist>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="card_series" className={FORM_LABEL_CLASS}>
+                      Série
+                    </Label>
+                    <Input
+                      id="card_series"
+                      placeholder="Ex: Vainqueurs Supremes"
+                      value={cardSeriesValue}
+                      onChange={(event) => setCardSeriesValue(event.target.value)}
+                      list="card-series-suggestions"
+                      className={FORM_INPUT_CLASS}
+                    />
+                    <datalist id="card-series-suggestions">
+                      {cardFieldSuggestions.sets.map((value) => (
+                        <option key={value} value={value} />
+                      ))}
+                    </datalist>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="card_set" className={FORM_LABEL_CLASS}>
-                      Set / Extension
+                      Bloc
                     </Label>
-                    <Select
-                      value={cardSetValue || undefined}
-                      onValueChange={setCardSetValue}
-                    >
-                      <SelectTrigger id="card_set" className={`w-full ${FORM_INPUT_CLASS}`}>
-                        <SelectValue placeholder="Choisir un set" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {cardSetOptions.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Input
+                      id="card_set"
+                      placeholder="Ex: Platine"
+                      value={cardSetValue}
+                      onChange={(event) => setCardSetValue(event.target.value)}
+                      className={FORM_INPUT_CLASS}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="card_number" className={FORM_LABEL_CLASS}>
@@ -909,82 +1025,77 @@ export function SellForm() {
                       placeholder="Ex: 10/102"
                       value={cardNumberValue}
                       onChange={(event) => setCardNumberValue(event.target.value)}
+                      list="card-number-suggestions"
                       className={FORM_INPUT_CLASS}
                     />
+                    <datalist id="card-number-suggestions">
+                      {cardFieldSuggestions.numbers.map((value) => (
+                        <option key={value} value={value} />
+                      ))}
+                    </datalist>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="card_language" className={FORM_LABEL_CLASS}>
                       Langue
                     </Label>
-                    <Select
-                      value={cardLanguageValue || undefined}
-                      onValueChange={(value) =>
-                        setCardLanguageValue(value as "" | "fr" | "en" | "jp")
-                      }
-                    >
-                      <SelectTrigger id="card_language" className={`w-full ${FORM_INPUT_CLASS}`}>
-                        <SelectValue placeholder="Choisir une langue" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="fr">FR</SelectItem>
-                        <SelectItem value="en">EN</SelectItem>
-                        <SelectItem value="jp">JP</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="card_hp" className={FORM_LABEL_CLASS}>
-                      HP
-                    </Label>
                     <Input
-                      id="card_hp"
-                      type="number"
-                      min="0"
-                      placeholder="Ex: 60"
-                      value={cardHpValue}
-                      onChange={(event) => setCardHpValue(event.target.value)}
+                      id="card_language"
+                      placeholder="FR / EN / JP"
+                      value={cardLanguageValue.toUpperCase()}
+                      onChange={(event) => {
+                        const next = event.target.value.trim().toLowerCase();
+                        if (!next) {
+                          setCardLanguageValue("");
+                          return;
+                        }
+                        if (next === "fr" || next === "en" || next === "jp") {
+                          setCardLanguageValue(next);
+                        }
+                      }}
+                      list="card-language-suggestions"
                       className={FORM_INPUT_CLASS}
                     />
+                    <datalist id="card-language-suggestions">
+                      {cardFieldSuggestions.languages.map((value) => (
+                        <option key={value} value={value} />
+                      ))}
+                    </datalist>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="card_rarity" className={FORM_LABEL_CLASS}>
                       Rarete
                     </Label>
-                    <Select
-                      value={cardRarityValue || undefined}
-                      onValueChange={setCardRarityValue}
-                    >
-                      <SelectTrigger id="card_rarity" className={`w-full ${FORM_INPUT_CLASS}`}>
-                        <SelectValue placeholder="Choisir une rarete" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {cardRarityOptions.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Input
+                      id="card_rarity"
+                      placeholder="Ex: Rare"
+                      value={cardRarityValue}
+                      onChange={(event) => setCardRarityValue(event.target.value)}
+                      list="card-rarity-suggestions"
+                      className={FORM_INPUT_CLASS}
+                    />
+                    <datalist id="card-rarity-suggestions">
+                      {cardFieldSuggestions.rarities.map((value) => (
+                        <option key={value} value={value} />
+                      ))}
+                    </datalist>
                   </div>
                   <div className="space-y-2 md:col-span-2">
                     <Label htmlFor="card_finish" className={FORM_LABEL_CLASS}>
-                      Finition
+                      Version
                     </Label>
-                    <Select
-                      value={cardFinishValue || undefined}
-                      onValueChange={setCardFinishValue}
-                    >
-                      <SelectTrigger id="card_finish" className={`w-full ${FORM_INPUT_CLASS}`}>
-                        <SelectValue placeholder="Choisir une finition" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {FINISH_OPTIONS.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Input
+                      id="card_finish"
+                      placeholder="Ex: Reverse Holo"
+                      value={cardFinishValue}
+                      onChange={(event) => setCardFinishValue(event.target.value)}
+                      list="card-version-suggestions"
+                      className={FORM_INPUT_CLASS}
+                    />
+                    <datalist id="card-version-suggestions">
+                      {cardFieldSuggestions.finishes.map((value) => (
+                        <option key={value} value={value} />
+                      ))}
+                    </datalist>
                   </div>
                 </div>
               </section>
@@ -1345,10 +1456,10 @@ export function SellForm() {
                           </p>
                         </div>
                         {cardNameValue ||
+                        cardSeriesValue ||
                         cardSetValue ||
                         cardNumberValue ||
                         cardLanguageValue ||
-                        cardHpValue ||
                         cardRarityValue ||
                         cardFinishValue ||
                         selectedOcrCandidate ? (
@@ -1358,30 +1469,28 @@ export function SellForm() {
                             </p>
                             <div className="grid grid-cols-1 gap-1">
                               <p>
-                                Nom: {cardNameValue || selectedOcrCandidate?.name || "-"}
+                                N°: {cardNumberValue || selectedOcrCandidate?.cardNumber || "-"}
                               </p>
                               <p>
-                                Set:{" "}
-                                {formatSetLabel(cardSetValue || selectedOcrCandidate?.set)}
+                                Série:{" "}
+                                {selectedOcrCandidate?.setDetails?.name ||
+                                  cardSeriesValue ||
+                                  formatSetLabel(selectedOcrCandidate?.set) ||
+                                  "-"}
                               </p>
                               <p>
-                                Numero: {cardNumberValue || selectedOcrCandidate?.cardNumber || "-"}
+                                Bloc:{" "}
+                                {selectedOcrCandidate?.setDetails?.serie?.name ||
+                                  selectedOcrCandidate?.setDetails?.series ||
+                                  selectedOcrCandidate?.setDetails?.id ||
+                                  selectedOcrCandidate?.setDetails?.seriesId ||
+                                  cardSetValue ||
+                                  "-"}
                               </p>
                               <p>
-                                Langue:{" "}
-                                {(cardLanguageValue || selectedOcrCandidate?.language || "-").toUpperCase()}
+                                Version: {cardFinishValue || selectedOcrCandidate?.finish || "-"}
                               </p>
-                              <p>HP: {cardHpValue || selectedOcrCandidate?.hp || "-"}</p>
-                              <p>
-                                Rarete: {cardRarityValue || selectedOcrCandidate?.rarity || "-"} ·
-                                Finition: {cardFinishValue || selectedOcrCandidate?.finish || "-"}
-                              </p>
-                              <p>
-                                Ref:{" "}
-                                {selectedOcrCandidate
-                                  ? selectedOcrCandidate.tcgId || selectedOcrCandidate.cardRefId
-                                  : "Reference manuelle"}
-                              </p>
+                              <p>Rareté: {cardRarityValue || selectedOcrCandidate?.rarity || "-"}</p>
                             </div>
                           </div>
                         ) : null}

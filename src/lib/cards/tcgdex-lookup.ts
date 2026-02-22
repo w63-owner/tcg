@@ -152,11 +152,12 @@ function mapTcgdexCardToLookupRow(card: TcgdexCard, language: string): CardRefLo
   const tcgId = String(card.id ?? "").trim();
   const name = String(card.name ?? "").trim();
   if (!tcgId || !name) return null;
+  const dbLanguage = language === "ja" ? "jp" : language;
 
   const setIdRaw = String(card.set?.id ?? "").trim();
   const setId = setIdRaw ? setIdRaw.toUpperCase() : "UNKNOWN";
   return {
-    id: `tcgdex:${tcgId}`,
+    id: `${dbLanguage}:${tcgId}`,
     category: card.category ?? null,
     name,
     setId,
@@ -168,6 +169,7 @@ function mapTcgdexCardToLookupRow(card: TcgdexCard, language: string): CardRefLo
       id: setIdRaw || null,
       logo: card.set?.logo ?? null,
       name: card.set?.name ?? null,
+      serie: null,
       symbol: card.set?.symbol ?? null,
     },
     variants: {
@@ -179,7 +181,7 @@ function mapTcgdexCardToLookupRow(card: TcgdexCard, language: string): CardRefLo
     },
     tcgId,
     localId: card.localId ?? null,
-    language: language === "ja" ? "jp" : language,
+    language: dbLanguage,
     rarity: card.rarity ?? null,
     finish: null,
     hp: card.hp ?? null,
@@ -269,6 +271,12 @@ export async function lookupTcgdexCandidates(input: LookupInput): Promise<CardRe
           seriesId:
             seriesIdRaw ??
             (seriesName ? seriesName.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-") : null),
+          serie: setDetail.serie
+            ? {
+                id: setDetail.serie.id ?? null,
+                name: setDetail.serie.name ?? null,
+              }
+            : null,
           symbol: setDetail.symbol ?? mapped.set?.symbol ?? null,
         };
       }

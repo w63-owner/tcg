@@ -13,6 +13,10 @@ function isUuid(value: string) {
   );
 }
 
+function isCardKey(value: string) {
+  return /^(fr|en|jp):[a-z0-9][a-z0-9._-]*$/i.test(value.trim());
+}
+
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as SelectionBody;
@@ -22,8 +26,7 @@ export async function POST(request: Request) {
     if (!isUuid(attemptId)) {
       return NextResponse.json({ error: "Invalid attemptId" }, { status: 400 });
     }
-
-    if (selectedCardRefId && !isUuid(selectedCardRefId)) {
+    if (selectedCardRefId && !isCardKey(selectedCardRefId)) {
       return NextResponse.json({ error: "Invalid selectedCardRefId" }, { status: 400 });
     }
 

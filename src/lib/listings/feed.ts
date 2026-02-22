@@ -55,12 +55,12 @@ export function parseFeedFilters(params: Record<string, string | undefined>): Fe
 
 export async function fetchSetOptions(supabase: SupabaseClient) {
   const { data: setRows } = await supabase
-    .from("cards_ref")
-    .select("setId")
-    .order("setId", { ascending: true })
+    .from("tcgdex_sets")
+    .select("name")
+    .order("name", { ascending: true })
     .limit(500);
 
-  return Array.from(new Set((setRows ?? []).map((row) => row.setId).filter(Boolean)));
+  return Array.from(new Set((setRows ?? []).map((row) => row.name).filter(Boolean)));
 }
 
 export async function fetchCardRefIdsByQuery(supabase: SupabaseClient, query: string) {
@@ -68,14 +68,14 @@ export async function fetchCardRefIdsByQuery(supabase: SupabaseClient, query: st
   if (!term) return [] as string[];
 
   const { data } = await supabase
-    .from("cards_ref")
-    .select("id")
+    .from("tcgdex_cards")
+    .select("card_key")
     .or(
-      `name.ilike.%${term}%,setId.ilike.%${term}%,tcgId.ilike.%${term}%,localId.ilike.%${term}%,language.ilike.%${term}%,releaseYear.ilike.%${term}%`,
+      `name.ilike.%${term}%,set_id.ilike.%${term}%,set_name.ilike.%${term}%,id.ilike.%${term}%,local_id.ilike.%${term}%,language.ilike.%${term}%`,
     )
     .limit(2000);
 
-  return (data ?? []).map((row) => row.id as string);
+  return (data ?? []).map((row) => row.card_key as string);
 }
 
 export async function fetchListingsFeedPage(params: {
@@ -96,15 +96,15 @@ export async function fetchListingsFeedPage(params: {
 
   let cardRefIds: string[] | null = null;
   if (filters.set || filters.rarity) {
-    let cardRefRequest = supabase.from("cards_ref").select("id");
+    let cardRefRequest = supabase.from("tcgdex_cards").select("card_key");
     if (filters.set) {
-      cardRefRequest = cardRefRequest.eq("setId", filters.set);
+      cardRefRequest = cardRefRequest.eq("set_name", filters.set);
     }
     if (filters.rarity) {
       cardRefRequest = cardRefRequest.eq("rarity", filters.rarity);
     }
     const { data: cardRefs } = await cardRefRequest.limit(2000);
-    cardRefIds = (cardRefs ?? []).map((row) => row.id);
+    cardRefIds = (cardRefs ?? []).map((row) => row.card_key);
     if (cardRefIds.length === 0) {
       return { listings: [] as ListingFeedRow[], hasNextPage: false, error: null };
     }
@@ -193,8 +193,8 @@ export async function fetchListingsFeedPage(params: {
         .select("listing_id")
         .in("listing_id", pageRows.map((row) => row.id)),
       pageCardRefIds.length > 0
-        ? supabase.from("cards_ref").select("id, language").in("id", pageCardRefIds)
-        : Promise.resolve({ data: [] as Array<{ id: string; language: string | null }> }),
+        ? supabase.from("tcgdex_cards").select("card_key, language").in("card_key", pageCardRefIds)
+        : Promise.resolve({ data: [] as Array<{ card_key: string; language: string | null }> }),
     ]);
 
     for (const row of favoriteResult.data ?? []) {
@@ -202,7 +202,7 @@ export async function fetchListingsFeedPage(params: {
       favoriteCountsByListingId.set(key, (favoriteCountsByListingId.get(key) ?? 0) + 1);
     }
     for (const row of languageResult.data ?? []) {
-      languageByCardRefId.set(String(row.id), row.language ?? null);
+      languageByCardRefId.set(String((row as { card_key?: string }).card_key ?? ""), row.language ?? null);
     }
   }
 

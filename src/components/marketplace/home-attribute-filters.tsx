@@ -174,12 +174,12 @@ export function HomeAttributeFilters({
             }
           >
             <SelectTrigger className={triggerClass(isRarityActive)}>
-              <SelectValue placeholder="Rarete: Toutes raretes" />
+              <SelectValue placeholder="Toutes raretes" />
             </SelectTrigger>
             <SelectContent>
               {rarityOptions.map((option) => (
                 <SelectItem key={option.value || ALL_OPTION} value={option.value || ALL_OPTION}>
-                  {`Rarete: ${option.label}`}
+                  {option.label}
                 </SelectItem>
               ))}
             </SelectContent>

@@ -37,6 +37,10 @@ export type CardRefCandidate = {
     name?: string | null;
     series?: string | null;
     seriesId?: string | null;
+    serie?: {
+      id?: string | null;
+      name?: string | null;
+    } | null;
     symbol?: string | null;
   } | null;
   variants?: {
@@ -78,6 +82,10 @@ export type CardRefLookupRow = {
     name?: string | null;
     series?: string | null;
     seriesId?: string | null;
+    serie?: {
+      id?: string | null;
+      name?: string | null;
+    } | null;
     symbol?: string | null;
   } | null;
   variants?: {

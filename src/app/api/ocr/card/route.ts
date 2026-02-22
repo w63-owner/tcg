@@ -19,6 +19,15 @@ function sanitizeLookupToken(value: string) {
   return value.replace(/[^a-zA-Z0-9/-]/g, "").trim();
 }
 
+function normalizeDbLanguage(value: string | undefined) {
+  const lang = String(value ?? "")
+    .trim()
+    .toLowerCase();
+  if (lang === "fr" || lang === "en" || lang === "jp") return lang;
+  if (lang === "ja") return "jp";
+  return null;
+}
+
 function toClientOcrErrorMessage(message: string) {
   const normalized = message.toLowerCase();
   if (normalized.includes("openai_api_key")) {
@@ -34,6 +43,81 @@ function toClientOcrErrorMessage(message: string) {
     return "OCR n'a detecte aucun texte exploitable.";
   }
   return "OCR processing failed";
+}
+
+type TcgdexCardDbRow = {
+  language: string;
+  id: string;
+  card_key: string;
+  category: string | null;
+  name: string;
+  set_id: string;
+  set_name: string | null;
+  set_logo: string | null;
+  set_symbol: string | null;
+  set_card_count_official: number | null;
+  set_card_count_total: number | null;
+  set_serie_id: string | null;
+  set_serie_name: string | null;
+  variants: Record<string, unknown> | null;
+  local_id: string | null;
+  hp: number | null;
+  rarity: string | null;
+  suffix: string | null;
+  regulation_mark: string | null;
+  illustrator: string | null;
+  image: string | null;
+};
+
+type TcgdexSetDbRow = {
+  language: string;
+  id: string;
+  name: string | null;
+  serie_id: string | null;
+  serie_name: string | null;
+};
+
+function mapDbRowToLookupRow(row: TcgdexCardDbRow, setRow?: TcgdexSetDbRow): CardRefLookupRow {
+  const effectiveSetName = setRow?.name ?? row.set_name;
+  const effectiveSerieId = setRow?.serie_id ?? row.set_serie_id;
+  const effectiveSerieName = setRow?.serie_name ?? row.set_serie_name;
+  return {
+    id: row.card_key,
+    category: row.category,
+    name: row.name,
+    setId: row.set_id,
+    set: {
+      cardCount: {
+        official: row.set_card_count_official,
+        total: row.set_card_count_total,
+      },
+      id: row.set_id,
+      logo: row.set_logo,
+      name: effectiveSetName,
+      series: effectiveSerieName,
+      seriesId: effectiveSerieId,
+      serie:
+        effectiveSerieId || effectiveSerieName
+          ? { id: effectiveSerieId, name: effectiveSerieName }
+          : null,
+      symbol: row.set_symbol,
+    },
+    variants: row.variants as CardRefLookupRow["variants"],
+    tcgId: row.id,
+    localId: row.local_id,
+    language: row.language,
+    rarity: row.rarity,
+    finish: row.suffix,
+    hp: row.hp,
+    is_secret: null,
+    is_promo: null,
+    vintage_hint: null,
+    regulationMark: row.regulation_mark,
+    illustrator: row.illustrator,
+    estimated_condition: null,
+    releaseYear: null,
+    image: row.image,
+  };
 }
 
 function parseFromStructuredOutput(
@@ -114,7 +198,11 @@ export async function POST(request: Request) {
     const strictName = String(parsed.name ?? "").trim();
     const strictLocalId = String(parsed.localId ?? "").trim();
     const strictPrintedTotal = String(parsed.printedTotal ?? "").trim();
-    const useStrictThreeKeyLookup = Boolean(strictName && strictLocalId);
+    const strictOfficialCount = Number(strictPrintedTotal);
+    const useStrictThreeKeyLookup =
+      Boolean(strictName && strictLocalId && strictPrintedTotal) &&
+      Number.isFinite(strictOfficialCount) &&
+      strictOfficialCount > 0;
 
     const matchesPrintedTotal = (row: CardRefLookupRow) => {
       if (!strictPrintedTotal) return true;
@@ -127,22 +215,30 @@ export async function POST(request: Request) {
     let fallbackRows: CardRefLookupRow[] = [];
     let feedbackBoostByCardRefId: Record<string, number> = {};
     if (useStrictThreeKeyLookup || lookupTerms.length > 0) {
+      const parsedLanguage = normalizeDbLanguage(parsed.language);
       let lookupRequest = supabase
-        .from("cards_ref")
+        .from("tcgdex_cards")
         .select(
-          "id, category, name, setId, set, variants, tcgId, localId, language, hp, rarity, finish, is_secret, is_promo, vintage_hint, regulationMark, illustrator, estimated_condition, releaseYear, image",
+          "language,id,card_key,category,name,set_id,set_name,set_logo,set_symbol,set_card_count_official,set_card_count_total,set_serie_id,set_serie_name,variants,local_id,hp,rarity,suffix,regulation_mark,illustrator,image",
         )
         .limit(120);
+      if (parsedLanguage) {
+        lookupRequest = lookupRequest.eq("language", parsedLanguage);
+      }
 
       if (useStrictThreeKeyLookup) {
-        lookupRequest = lookupRequest.ilike("name", `%${strictName}%`).eq("localId", strictLocalId);
+        lookupRequest = lookupRequest
+          .ilike("name", `%${strictName}%`)
+          .eq("local_id", strictLocalId)
+          .eq("set_card_count_official", strictOfficialCount);
       } else {
         const orFilters = lookupTerms
           .flatMap((term) => [
             `name.ilike.%${term}%`,
-            `setId.ilike.%${term}%`,
-            `tcgId.ilike.%${term}%`,
-            `localId.ilike.%${term}%`,
+            `set_id.ilike.%${term}%`,
+            `set_name.ilike.%${term}%`,
+            `id.ilike.%${term}%`,
+            `local_id.ilike.%${term}%`,
           ])
           .join(",");
         lookupRequest = lookupRequest.or(orFilters);
@@ -157,7 +253,32 @@ export async function POST(request: Request) {
           context: { userId: user.id },
         });
       } else {
-        localRows = ((rows ?? []) as CardRefLookupRow[]).filter(matchesPrintedTotal);
+        const dbRows = (rows ?? []) as TcgdexCardDbRow[];
+        const setIds = Array.from(new Set(dbRows.map((row) => String(row.set_id ?? "").trim()).filter(Boolean)));
+        let setByCompositeKey = new Map<string, TcgdexSetDbRow>();
+        if (setIds.length > 0) {
+          const { data: setRows, error: setLookupError } = await supabase
+            .from("tcgdex_sets")
+            .select("language,id,name,serie_id,serie_name")
+            .in("id", setIds);
+          if (setLookupError) {
+            logError({
+              event: "ocr_set_lookup_failed",
+              message: setLookupError.message,
+              context: { userId: user.id },
+            });
+          } else {
+            setByCompositeKey = new Map(
+              ((setRows ?? []) as TcgdexSetDbRow[]).map((setRow) => [
+                `${setRow.language}:${setRow.id}`,
+                setRow,
+              ]),
+            );
+          }
+        }
+        localRows = dbRows
+          .map((row) => mapDbRowToLookupRow(row, setByCompositeKey.get(`${row.language}:${row.set_id}`)))
+          .filter(matchesPrintedTotal);
 
         if (localRows.length > 0) {
           const cardRefIds = localRows.map((row) => row.id);
@@ -222,6 +343,13 @@ export async function POST(request: Request) {
     }
 
     const hasImage = (row: CardRefLookupRow) => Boolean(String(row.image ?? "").trim());
+    const pickText = (...values: Array<string | null | undefined>) => {
+      for (const value of values) {
+        const text = String(value ?? "").trim();
+        if (text) return text;
+      }
+      return null;
+    };
     const mergeSetDetails = (localSet: CardRefLookupRow["set"], fallbackSet: CardRefLookupRow["set"]) => {
       const left = localSet ?? null;
       const right = fallbackSet ?? null;
@@ -233,12 +361,19 @@ export async function POST(request: Request) {
           official: left.cardCount?.official ?? right.cardCount?.official ?? null,
           total: left.cardCount?.total ?? right.cardCount?.total ?? null,
         },
-        id: left.id ?? right.id ?? null,
-        logo: left.logo ?? right.logo ?? null,
-        name: left.name ?? right.name ?? null,
-        series: left.series ?? right.series ?? null,
-        seriesId: left.seriesId ?? right.seriesId ?? null,
-        symbol: left.symbol ?? right.symbol ?? null,
+        id: pickText(left.id, right.id),
+        logo: pickText(left.logo, right.logo),
+        name: pickText(left.name, right.name),
+        series: pickText(left.series, left.serie?.name, right.series, right.serie?.name),
+        seriesId: pickText(left.seriesId, left.serie?.id, right.seriesId, right.serie?.id),
+        serie:
+          left.serie?.id || left.serie?.name || right.serie?.id || right.serie?.name
+            ? {
+                id: pickText(left.serie?.id, right.serie?.id),
+                name: pickText(left.serie?.name, right.serie?.name),
+              }
+            : null,
+        symbol: pickText(left.symbol, right.symbol),
       };
     };
     const byKey = new Map<string, CardRefLookupRow>();

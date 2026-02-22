@@ -17,7 +17,11 @@
     "seed:listings:massive": "node scripts/seed-listings.mjs 120",
     "seed:price-guide": "node scripts/seed-price-guide.mjs",
     "seed:cards-catalog": "node scripts/seed-cards-catalog.mjs",
-    "seed:cards-catalog:incremental": "node scripts/seed-cards-catalog.mjs --incremental"
+    "seed:cards-catalog:incremental": "node scripts/seed-cards-catalog.mjs --incremental",
+    "seed:tcgdex:series": "npx ts-node --compiler-options '{\"module\":\"commonjs\"}' scripts/seed-tcgdex-series.ts",
+    "seed:tcgdex:sets": "npx ts-node --compiler-options '{\"module\":\"commonjs\"}' scripts/seed-tcgdex-sets.ts",
+    "seed:tcgdex:cards": "npx ts-node --compiler-options '{\"module\":\"commonjs\"}' scripts/seed-tcgdex-cards.ts",
+    "seed:tcgdex:all": "npx ts-node --compiler-options '{\"module\":\"commonjs\"}' scripts/seed-tcgdex-all.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.8.0",
