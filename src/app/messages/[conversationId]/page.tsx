@@ -7,6 +7,10 @@ import { requireAuthenticatedUser } from "@/lib/auth/require-authenticated-user"
 import { ThreadRealtime } from "./thread-realtime";
 import { ConversationLiveControls } from "./conversation-live-controls";
 import { ConversationThread } from "./conversation-thread";
+import { OfferModal } from "./offer-modal";
+import { AcceptOfferForm } from "./accept-offer-form";
+import { BuyReservedForm } from "./buy-reserved-form";
+import { TrackingCard } from "./receipt-action-client";
 
 type ConversationRow = {
   id: string;
@@ -19,16 +23,26 @@ type ConversationRow = {
         title: string;
         cover_image_url: string | null;
         display_price: number | null;
+        status?: string;
       }
     | Array<{
         id: string;
         title: string;
         cover_image_url: string | null;
         display_price: number | null;
+        status?: string;
       }>
     | null;
   buyer: Array<{ id: string; username: string }> | null;
   seller: Array<{ id: string; username: string }> | null;
+};
+
+type OfferRow = {
+  id: string;
+  offer_amount: number;
+  status: string;
+  buyer_id: string;
+  listing_id: string;
 };
 
 type MessageRow = {
@@ -37,6 +51,9 @@ type MessageRow = {
   content: string;
   created_at: string;
   read_at: string | null;
+  message_type?: string | null;
+  offer_id?: string | null;
+  offer?: OfferRow | OfferRow[] | null;
 };
 
 type MessagesThreadPageProps = {
@@ -60,7 +77,7 @@ export default async function MessagesThreadPage({
   const { data: conversation } = await supabase
     .from("conversations")
     .select(
-      "id, listing_id, buyer_id, seller_id, listing:listings(id, title, cover_image_url, display_price), buyer:profiles!conversations_buyer_id_fkey(id, username), seller:profiles!conversations_seller_id_fkey(id, username)",
+      "id, listing_id, buyer_id, seller_id, listing:listings(id, title, cover_image_url, display_price, status), buyer:profiles!conversations_buyer_id_fkey(id, username), seller:profiles!conversations_seller_id_fkey(id, username)",
     )
     .eq("id", conversationId)
     .maybeSingle<ConversationRow>();
@@ -82,10 +99,26 @@ export default async function MessagesThreadPage({
 
   const { data: messages } = await supabase
     .from("messages")
-    .select("id, sender_id, content, created_at, read_at")
+    .select("id, sender_id, content, created_at, read_at, message_type, offer_id, offer:offers(id, offer_amount, status, buyer_id, listing_id)")
     .eq("conversation_id", conversation.id)
     .order("created_at", { ascending: true })
     .limit(200);
+
+  const { data: acceptedOfferRow } = await supabase
+    .from("offers")
+    .select("id")
+    .eq("conversation_id", conversation.id)
+    .eq("buyer_id", user.id)
+    .eq("status", "ACCEPTED")
+    .maybeSingle<{ id: string }>();
+
+  const { data: pendingOfferRow } = await supabase
+    .from("offers")
+    .select("id")
+    .eq("conversation_id", conversation.id)
+    .eq("buyer_id", user.id)
+    .eq("status", "PENDING")
+    .maybeSingle<{ id: string }>();
 
   const rows = (messages ?? []) as MessageRow[];
   const counterpart =
@@ -97,6 +130,37 @@ export default async function MessagesThreadPage({
   const listing = pickOne(conversation.listing);
   const listingPrice = listing?.display_price ?? null;
   const canOffer = Boolean(listing && user.id !== conversation.seller_id);
+  const basePrice = typeof listingPrice === "number" ? listingPrice : 0;
+  const acceptedOfferId = acceptedOfferRow?.id ?? null;
+  const hasPendingOfferFromBuyer = Boolean(pendingOfferRow?.id);
+  const isSeller = user.id === conversation.seller_id;
+  const isBuyer = user.id === conversation.buyer_id;
+  const showOfferButton = canOffer && !hasPendingOfferFromBuyer;
+
+  let shippedTransaction: {
+    id: string;
+    tracking_number: string | null;
+    tracking_url: string | null;
+    status: string;
+  } | null = null;
+  if (isBuyer) {
+    const { data: txRow } = await supabase
+      .from("transactions")
+      .select("id, tracking_number, tracking_url, status")
+      .eq("listing_id", conversation.listing_id)
+      .eq("buyer_id", conversation.buyer_id)
+      .eq("seller_id", conversation.seller_id)
+      .eq("status", "SHIPPED")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<{
+        id: string;
+        tracking_number: string | null;
+        tracking_url: string | null;
+        status: string;
+      }>();
+    shippedTransaction = txRow ?? null;
+  }
 
   return (
     <section className="flex min-h-[calc(100dvh-8rem)] flex-col gap-3 pb-[calc(8.5rem+var(--safe-area-bottom))] md:pb-0">
@@ -149,23 +213,36 @@ export default async function MessagesThreadPage({
         )}
       </div>
 
+      {isBuyer && shippedTransaction ? (
+        <div className="shrink-0">
+          <TrackingCard transaction={shippedTransaction} />
+        </div>
+      ) : null}
+
       <div className="flex-1 overflow-hidden">
         <div className="h-full pt-3">
-          <ConversationThread messages={rows} currentUserId={user.id} />
+          <ConversationThread
+            messages={rows}
+            currentUserId={user.id}
+            sellerId={conversation.seller_id}
+          />
         </div>
       </div>
 
-      {listing ? (
-        <div className="fixed inset-x-0 bottom-[calc(4.75rem+var(--safe-area-bottom))] z-40 px-4 md:hidden">
-          {canOffer ? (
-            <Button asChild variant="outline" className="w-full">
-              <Link href={`/listing/${listing.id}`}>Faire une offre</Link>
-            </Button>
-          ) : (
-            <Button variant="outline" className="w-full" disabled>
-              Faire une offre
-            </Button>
-          )}
+      {acceptedOfferId && !isSeller ? (
+        <div className="border-border/70 flex flex-col gap-2 border-t bg-background/95 px-4 py-2 md:rounded-md md:border md:p-2">
+          <BuyReservedForm offerId={acceptedOfferId} />
+        </div>
+      ) : null}
+
+      {listing && basePrice > 0 && showOfferButton ? (
+        <div className="border-border/70 flex flex-col gap-2 border-t bg-background/95 px-4 py-2 md:rounded-md md:border md:p-2">
+          <OfferModal
+            conversationId={conversation.id}
+            listingId={listing.id}
+            basePrice={basePrice}
+            canOffer={true}
+          />
         </div>
       ) : null}
 

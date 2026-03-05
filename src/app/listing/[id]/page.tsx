@@ -7,7 +7,8 @@ import { ListingImageCarousel } from "@/components/listing/listing-image-carouse
 import { ListingMediaActions } from "@/components/listing/listing-media-actions";
 import { DeleteListingButton } from "@/components/listing/delete-listing-button";
 import { PriceHistoryCard } from "@/components/listing/price-history-card";
-import { startCheckoutAction, updateListingPriceAction } from "./actions";
+import { updateListingPriceAction } from "./actions";
+import { BuyButton } from "./buy-button";
 import { ListingErrorToast } from "./listing-error-toast";
 import { createConversationForListingAction } from "@/app/messages/actions";
 import { calculateDisplayPrice } from "@/lib/pricing";
@@ -328,12 +329,9 @@ export default async function ListingPage({
                   : formatConditionUserLabel(listing.condition)}
               </p>
             </div>
-            <form action={startCheckoutAction} className="hidden space-y-2 md:block">
-              <input type="hidden" name="listing_id" value={listing.id} />
-              <Button type="submit" className="w-full" disabled={!canBuy}>
-                Acheter
-              </Button>
-            </form>
+            <div className="hidden md:block">
+              <BuyButton listingId={listing.id} disabled={!canBuy} className="w-full" />
+            </div>
             {user && user.id !== listing.seller_id ? (
               <form action={createConversationForListingAction} className="hidden md:block">
                 <input type="hidden" name="listing_id" value={listing.id} />
@@ -475,12 +473,11 @@ export default async function ListingPage({
                     Contacter
                   </Button>
                 </form>
-                <form action={startCheckoutAction}>
-                  <input type="hidden" name="listing_id" value={listing.id} />
-                  <Button type="submit" className="h-12 w-full" disabled={!canBuy}>
-                    Acheter
-                  </Button>
-                </form>
+                <BuyButton
+                  listingId={listing.id}
+                  disabled={!canBuy}
+                  className="h-12 w-full"
+                />
               </>
             ) : (
               <>

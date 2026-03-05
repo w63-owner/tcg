@@ -31,22 +31,30 @@ export function getSupabasePublicEnv() {
 }
 
 export function getSiteUrl() {
+  let url: string;
   const explicit = process.env.NEXT_PUBLIC_SITE_URL?.trim();
-  if (explicit) return explicit;
-
-  const vercelProduction = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
-  if (vercelProduction) {
-    return vercelProduction.startsWith("http")
-      ? vercelProduction
-      : `https://${vercelProduction}`;
+  if (explicit) {
+    url = explicit;
+  } else {
+    const vercelProduction = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
+    if (vercelProduction) {
+      url = vercelProduction.startsWith("http")
+        ? vercelProduction
+        : `https://${vercelProduction}`;
+    } else {
+      const vercelPreview = process.env.VERCEL_URL?.trim();
+      if (vercelPreview) {
+        url = vercelPreview.startsWith("http")
+          ? vercelPreview
+          : `https://${vercelPreview}`;
+      } else {
+        return "http://localhost:3000";
+      }
+    }
   }
-
-  const vercelPreview = process.env.VERCEL_URL?.trim();
-  if (vercelPreview) {
-    return vercelPreview.startsWith("http")
-      ? vercelPreview
-      : `https://${vercelPreview}`;
+  // Corriger la typo courante vercel.ap -> vercel.app
+  if (url.includes("vercel.ap/") || url.endsWith("vercel.ap")) {
+    url = url.replace(/vercel\.ap(\/|$)/g, "vercel.app$1");
   }
-
-  return "http://localhost:3000";
+  return url;
 }

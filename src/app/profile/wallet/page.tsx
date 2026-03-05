@@ -16,6 +16,7 @@ type TransactionRow = {
   fee_amount: number;
   shipping_cost: number;
   created_at: string;
+  listing_title: string | null;
   listing: { title: string } | Array<{ title: string }> | null;
 };
 
@@ -45,7 +46,7 @@ export default async function ProfileWalletPage() {
       .maybeSingle<WalletRow>(),
     supabase
       .from("transactions")
-      .select("id, total_amount, fee_amount, shipping_cost, created_at, listing:listings(title)")
+      .select("id, total_amount, fee_amount, shipping_cost, created_at, listing_title, listing:listings(title)")
       .eq("seller_id", user.id)
       .eq("status", "PAID")
       .order("created_at", { ascending: false })
@@ -84,7 +85,7 @@ export default async function ProfileWalletPage() {
               return (
                 <div key={tx.id} className="flex items-center justify-between gap-3 py-3">
                   <p className="text-muted-foreground line-clamp-1 text-xs">
-                    Vente - {pickOne(tx.listing)?.title ?? "Annonce"} - {formatDate(tx.created_at)}
+                    Vente - {tx.listing_title ?? pickOne(tx.listing)?.title ?? "Annonce"} - {formatDate(tx.created_at)}
                   </p>
                   <p className="text-sm font-medium">+{net.toFixed(2)} €</p>
                 </div>

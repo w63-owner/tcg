@@ -32,11 +32,12 @@ export async function respondToOfferAction(formData: FormData) {
 
   const { data: offer } = await supabase
     .from("offers")
-    .select("id, listing_id, status, listing:listings!inner(seller_id)")
+    .select("id, listing_id, conversation_id, status, listing:listings!inner(seller_id)")
     .eq("id", offerId)
     .maybeSingle<{
       id: string;
       listing_id: string;
+      conversation_id: string | null;
       status: string;
       listing: { seller_id: string };
     }>();
@@ -59,9 +60,43 @@ export async function respondToOfferAction(formData: FormData) {
       .eq("status", "PENDING")
       .neq("id", offer.id);
 
-    await supabase.rpc("ensure_conversation_for_offer", {
+    const { data: fullOffer } = await supabase
+      .from("offers")
+      .select("id, listing_id, buyer_id, offer_amount, conversation_id")
+      .eq("id", offer.id)
+      .single<{
+        id: string;
+        listing_id: string;
+        buyer_id: string;
+        offer_amount: number;
+        conversation_id: string | null;
+      }>();
+
+    if (fullOffer) {
+      await supabase
+        .from("listings")
+        .update({
+          status: "RESERVED",
+          reserved_for: fullOffer.buyer_id,
+          reserved_price: fullOffer.offer_amount,
+        })
+        .eq("id", fullOffer.listing_id);
+    }
+
+    const { data: convId } = await supabase.rpc("ensure_conversation_for_offer", {
       p_offer_id: offer.id,
     });
+    const conversationId = convId as string | null;
+
+    if (conversationId && fullOffer) {
+      await supabase.from("messages").insert({
+        conversation_id: conversationId,
+        sender_id: user.id,
+        content: "Votre offre a été acceptée, vous pouvez passer au paiement.",
+        message_type: "system",
+      });
+    }
+
     logInfo({
       event: "offer_accepted_conversation_ensured",
       context: { offerId: offer.id, listingId: offer.listing_id, sellerId: user.id },
@@ -70,6 +105,10 @@ export async function respondToOfferAction(formData: FormData) {
 
   revalidatePath("/offers");
   revalidatePath(`/listing/${offer.listing_id}`);
+  revalidatePath("/messages");
+  if (offer?.conversation_id) {
+    revalidatePath(`/messages/${offer.conversation_id}`);
+  }
 }
 
 export async function cancelSentOfferAction(formData: FormData) {
@@ -110,6 +149,7 @@ type OfferCheckoutRow = {
     seller_id: string;
     status: string;
     delivery_weight_class: string;
+    reserved_for: string | null;
   }> | null;
 };
 
@@ -128,7 +168,7 @@ export async function startOfferCheckoutAction(formData: FormData) {
   const { data: offer } = await supabase
     .from("offers")
     .select(
-      "id, listing_id, buyer_id, offer_amount, status, listing:listings(id, title, seller_id, status, delivery_weight_class)",
+      "id, listing_id, buyer_id, offer_amount, status, listing:listings(id, title, seller_id, status, delivery_weight_class, reserved_for)",
     )
     .eq("id", offerId)
     .maybeSingle<OfferCheckoutRow>();
@@ -144,7 +184,10 @@ export async function startOfferCheckoutAction(formData: FormData) {
   if (offer.status !== "ACCEPTED") {
     redirect("/offers?error=offer_not_accepted");
   }
-  if (listing.status !== "ACTIVE") {
+  const listingAvailable =
+    listing.status === "ACTIVE" ||
+    (listing.status === "RESERVED" && listing.reserved_for === user.id);
+  if (!listingAvailable) {
     redirect("/offers?error=listing_not_available");
   }
 
@@ -195,6 +238,10 @@ export async function startOfferCheckoutAction(formData: FormData) {
         seller_id: listing.seller_id,
         offer_id: offer.id,
       },
+      buyerId: user.id,
+      buyerEmail: user.email ?? "",
+      feeAmount,
+      shippingCost,
     });
 
     if (!session.url) {

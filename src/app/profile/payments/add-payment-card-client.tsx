@@ -1,133 +1,114 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { loadStripe } from "@stripe/stripe-js";
+import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { loadPaymentCards, savePaymentCards } from "./payment-storage";
+import { createSetupIntent } from "./actions";
 
-export function AddPaymentCardClient() {
-  const router = useRouter();
-  const [holderName, setHolderName] = useState("");
-  const [cardNumber, setCardNumber] = useState("");
-  const [expiry, setExpiry] = useState("");
-  const [securityCode, setSecurityCode] = useState("");
+const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.trim();
+
+function AddCardForm({ onSuccess }: { onSuccess: () => void }) {
+  const stripe = useStripe();
+  const elements = useElements();
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const detectBrand = (digits: string) => {
-    if (digits.startsWith("4")) return "VISA";
-    if (/^5[1-5]/.test(digits) || /^2(2[2-9]|[3-6]\d|7[01])/.test(digits)) {
-      return "MASTERCARD";
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!stripe || !elements) return;
+    setError(null);
+    setLoading(true);
+    try {
+      const { error: submitError, setupIntent } = await stripe.confirmSetup({
+        elements,
+        confirmParams: {
+          return_url: `${window.location.origin}/profile/payments?added=1`,
+        },
+      });
+      if (submitError) {
+        setError(submitError.message ?? "Une erreur est survenue.");
+        setLoading(false);
+        return;
+      }
+      if (setupIntent?.status === "succeeded") {
+        onSuccess();
+      }
+      // If status is requires_action, Stripe redirects to return_url; user comes back to profile/payments?added=1
+    } catch {
+      setError("Une erreur est survenue.");
     }
-    if (/^3[47]/.test(digits)) return "AMEX";
-    return "CARTE";
-  };
-
-  const onSubmit = () => {
-    const normalizedHolder = holderName.trim();
-    const normalizedNumber = cardNumber.replace(/\D/g, "");
-    const normalizedSecurityCode = securityCode.replace(/\D/g, "");
-    const expiryMatch = expiry.trim().match(/^(\d{2})\/(\d{2})$/);
-    const month = expiryMatch?.[1] ?? "";
-    const year2 = expiryMatch?.[2] ?? "";
-    const monthNumber = Number(month);
-    const fullYear = year2 ? 2000 + Number(year2) : NaN;
-
-    if (!normalizedHolder) {
-      setError("Renseigne le nom figurant sur la carte.");
-      return;
-    }
-    if (normalizedNumber.length < 13 || normalizedNumber.length > 19) {
-      setError("Le numero de carte doit contenir entre 13 et 19 chiffres.");
-      return;
-    }
-    if (!expiryMatch || monthNumber < 1 || monthNumber > 12) {
-      setError("La date d'expiration doit etre au format MM/AA.");
-      return;
-    }
-    if (!/^\d{3,4}$/.test(normalizedSecurityCode)) {
-      setError("Le code de securite doit contenir 3 ou 4 chiffres.");
-      return;
-    }
-
-    const now = new Date();
-    const currentMonth = now.getMonth() + 1;
-    const currentYear = now.getFullYear();
-    if (fullYear < currentYear || (fullYear === currentYear && monthNumber < currentMonth)) {
-      setError("La carte est expiree.");
-      return;
-    }
-
-    const normalizedBrand = detectBrand(normalizedNumber);
-    const normalizedLast4 = normalizedNumber.slice(-4);
-    const cards = loadPaymentCards();
-    const next = [
-      ...cards,
-      {
-        id: crypto.randomUUID(),
-        brand: normalizedBrand,
-        last4: normalizedLast4,
-        holderName: normalizedHolder,
-        expMonth: month,
-        expYear: String(fullYear),
-      },
-    ];
-    savePaymentCards(next);
-    router.push("/profile/payments");
-    router.refresh();
+    setLoading(false);
   };
 
   return (
-    <div className="space-y-3">
-      <div className="space-y-1">
-        <p className="text-muted-foreground text-xs">Nom figurant sur la carte</p>
-        <Input
-          value={holderName}
-          onChange={(event) => setHolderName(event.target.value)}
-          placeholder="Saisis ton nom et prenom"
-          className="border-0 border-b border-border bg-transparent px-0 shadow-none rounded-none text-sm focus-visible:ring-0 focus-visible:border-b focus-visible:border-ring"
-        />
-      </div>
-      <div className="space-y-1">
-        <p className="text-muted-foreground text-xs">Numero de carte bancaire</p>
-        <Input
-          value={cardNumber}
-          onChange={(event) => setCardNumber(event.target.value)}
-          placeholder="Ex: 4242 4242 4242 4242"
-          inputMode="numeric"
-          className="border-0 border-b border-border bg-transparent px-0 shadow-none rounded-none text-sm focus-visible:ring-0 focus-visible:border-b focus-visible:border-ring"
-        />
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        <div className="space-y-1">
-          <p className="text-muted-foreground text-xs">Date d'expiration</p>
-          <Input
-            value={expiry}
-            onChange={(event) => setExpiry(event.target.value)}
-            placeholder="MM/AA"
-            maxLength={5}
-            className="border-0 border-b border-border bg-transparent px-0 shadow-none rounded-none text-sm focus-visible:ring-0 focus-visible:border-b focus-visible:border-ring"
-          />
-        </div>
-        <div className="space-y-1">
-          <p className="text-muted-foreground text-xs">Code de securite</p>
-          <Input
-            value={securityCode}
-            onChange={(event) => setSecurityCode(event.target.value)}
-            placeholder="CVV"
-            inputMode="numeric"
-            maxLength={4}
-            className="border-0 border-b border-border bg-transparent px-0 shadow-none rounded-none text-sm focus-visible:ring-0 focus-visible:border-b focus-visible:border-ring"
-          />
-        </div>
-      </div>
-      {error ? <p className="text-destructive text-xs">{error}</p> : null}
-      <Button type="button" className="w-full" onClick={onSubmit}>
-        Ajouter la carte
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <PaymentElement options={{ layout: "tabs" }} />
+      {error ? <p className="text-destructive text-sm">{error}</p> : null}
+      <Button type="submit" className="w-full" disabled={!stripe || loading}>
+        {loading ? "Enregistrement…" : "Enregistrer la carte"}
       </Button>
-      <p className="text-muted-foreground text-xs">
-        Les donnees sont uniquement stockees localement pour la demo.
+    </form>
+  );
+}
+
+export function AddPaymentCardClient() {
+  const router = useRouter();
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    createSetupIntent().then((result) => {
+      if ("clientSecret" in result) {
+        setClientSecret(result.clientSecret);
+      } else {
+        setError(result.error ?? "Impossible de charger le formulaire.");
+      }
+    });
+  }, []);
+
+  if (!publishableKey) {
+    return (
+      <p className="text-destructive text-sm">
+        Clé Stripe manquante (NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY).
       </p>
-    </div>
+    );
+  }
+
+  if (error) {
+    return <p className="text-destructive text-sm">{error}</p>;
+  }
+
+  if (!clientSecret) {
+    return (
+      <div className="animate-pulse space-y-4">
+        <div className="h-10 rounded border bg-muted" />
+        <div className="h-32 rounded border bg-muted" />
+        <div className="h-10 rounded bg-muted" />
+      </div>
+    );
+  }
+
+  const stripePromise = loadStripe(publishableKey);
+
+  return (
+    <Elements
+      stripe={stripePromise}
+      options={{
+        clientSecret,
+        appearance: {
+          theme: "stripe",
+          variables: { borderRadius: "6px" },
+        },
+      }}
+    >
+      <AddCardForm
+        onSuccess={() => {
+          router.push("/profile/payments");
+          router.refresh();
+        }}
+      />
+    </Elements>
   );
 }

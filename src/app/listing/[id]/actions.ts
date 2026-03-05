@@ -109,6 +109,10 @@ export async function startCheckoutAction(formData: FormData) {
         buyer_id: user.id,
         seller_id: listing.seller_id,
       },
+      buyerId: user.id,
+      buyerEmail: user.email ?? "",
+      feeAmount,
+      shippingCost,
     });
 
     if (!session.url) {

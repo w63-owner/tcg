@@ -157,3 +157,116 @@ export async function markConversationReadAction(formData: FormData) {
     context: { conversationId, userId: user.id },
   });
 }
+
+export type SubmitOfferFromConversationResult = {
+  ok: boolean;
+  error?: string;
+};
+
+export async function submitOfferFromConversationAction(
+  conversationId: string,
+  listingId: string,
+  offerAmount: number,
+): Promise<SubmitOfferFromConversationResult> {
+  if (!conversationId || !listingId) {
+    return { ok: false, error: "Conversation ou annonce invalide." };
+  }
+  if (!Number.isFinite(offerAmount) || offerAmount <= 0) {
+    return { ok: false, error: "Montant d'offre invalide." };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { ok: false, error: "Connecte-toi pour faire une offre." };
+  }
+
+  const { data: conversation } = await supabase
+    .from("conversations")
+    .select("id, listing_id, buyer_id, seller_id")
+    .eq("id", conversationId)
+    .maybeSingle<{ id: string; listing_id: string; buyer_id: string; seller_id: string }>();
+
+  if (!conversation || conversation.listing_id !== listingId) {
+    return { ok: false, error: "Conversation ou annonce invalide." };
+  }
+  if (conversation.buyer_id !== user.id && conversation.seller_id !== user.id) {
+    return { ok: false, error: "Tu ne fais pas partie de cette conversation." };
+  }
+  if (conversation.seller_id === user.id) {
+    return { ok: false, error: "Le vendeur ne peut pas faire d'offre sur sa propre annonce." };
+  }
+
+  const { data: listing } = await supabase
+    .from("listings")
+    .select("id, display_price")
+    .eq("id", listingId)
+    .maybeSingle<{ id: string; display_price: number | null }>();
+
+  if (!listing) {
+    return { ok: false, error: "Annonce introuvable." };
+  }
+
+  const displayPrice = Number(listing.display_price ?? 0);
+  const minPrice = Math.round(displayPrice * 0.6 * 100) / 100;
+  if (offerAmount < minPrice) {
+    return {
+      ok: false,
+      error: `Réduction maximale 40 %. Montant minimum : ${minPrice.toFixed(2)} €`,
+    };
+  }
+
+  const { data: offer, error: offerError } = await supabase
+    .from("offers")
+    .insert({
+      listing_id: listingId,
+      buyer_id: user.id,
+      offer_amount: Math.round(offerAmount * 100) / 100,
+      status: "PENDING",
+      conversation_id: conversationId,
+    })
+    .select("id")
+    .single<{ id: string }>();
+
+  if (offerError || !offer) {
+    logError({
+      event: "offer_from_conversation_insert_failed",
+      message: offerError?.message ?? "insert failed",
+      context: { conversationId, listingId, userId: user.id },
+    });
+    return { ok: false, error: offerError?.message ?? "Impossible d'enregistrer l'offre." };
+  }
+
+  const contentPlaceholder = `Offre : ${offerAmount.toFixed(2)} €`;
+  const { error: msgError } = await supabase.from("messages").insert({
+    conversation_id: conversationId,
+    sender_id: user.id,
+    content: contentPlaceholder,
+    message_type: "offer",
+    offer_id: offer.id,
+  });
+
+  if (msgError) {
+    logError({
+      event: "offer_message_insert_failed",
+      message: msgError.message,
+      context: { conversationId, offerId: offer.id },
+    });
+    return { ok: false, error: "Offre enregistrée mais erreur d'affichage dans le fil." };
+  }
+
+  await supabase
+    .from("conversations")
+    .update({ updated_at: new Date().toISOString() })
+    .eq("id", conversationId);
+
+  revalidatePath("/messages");
+  revalidatePath(`/messages/${conversationId}`);
+  logInfo({
+    event: "offer_sent_from_conversation",
+    context: { conversationId, offerId: offer.id, listingId, userId: user.id },
+  });
+  return { ok: true };
+}
