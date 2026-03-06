@@ -53,11 +53,11 @@ export function PaymentMethodsClient() {
     setDeleting(true);
     const result = await detachPaymentMethod(id);
     setDeleting(false);
-    if (result.ok) {
+    if ("ok" in result && result.ok) {
       setCardToDelete(null);
       await load();
     } else {
-      setError(result.error ?? "Erreur lors de la suppression.");
+      setError("error" in result ? result.error : "Erreur lors de la suppression.");
     }
   };
 
