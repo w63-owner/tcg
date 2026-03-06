@@ -1,11 +1,21 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@supabase/supabase-js";
+import { createClient as createServerClient } from "@/lib/supabase/server";
+import { getSupabasePublicEnv } from "@/lib/env";
 import { logError, logInfo } from "@/lib/observability";
 
 type SendMessageBody = {
   conversationId?: string;
   content?: string;
 };
+
+/** En dev uniquement : accepter Authorization: Bearer <access_token> pour les scripts de stress. */
+function getBearerToken(request: Request): string | null {
+  if (process.env.NODE_ENV !== "development") return null;
+  const auth = request.headers.get("Authorization");
+  if (!auth?.startsWith("Bearer ")) return null;
+  return auth.slice(7).trim() || null;
+}
 
 export async function POST(request: Request) {
   try {
@@ -20,10 +30,24 @@ export async function POST(request: Request) {
       );
     }
 
-    const supabase = await createClient();
-    const {
+    const bearerToken = getBearerToken(request);
+    let supabase = await createServerClient();
+    let {
       data: { user },
     } = await supabase.auth.getUser();
+
+    if (!user && bearerToken) {
+      const { url, anonKey } = getSupabasePublicEnv();
+      const clientWithToken = createClient(url, anonKey, {
+        global: { headers: { Authorization: `Bearer ${bearerToken}` } },
+      });
+      const { data: bearerUser } = await clientWithToken.auth.getUser(bearerToken);
+      if (bearerUser?.user) {
+        user = bearerUser.user;
+        supabase = clientWithToken;
+      }
+    }
+
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

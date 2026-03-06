@@ -12,6 +12,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "stress:auth": "node scripts/stress-auth.mjs",
+    "stress:messages": "node scripts/stress-messages.mjs",
     "rls:audit": "node scripts/rls-intrusion-audit.mjs",
     "seed:listings": "node scripts/seed-listings.mjs",
     "seed:listings:massive": "node scripts/seed-listings.mjs 120",
