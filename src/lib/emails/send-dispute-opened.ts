@@ -45,8 +45,8 @@ export async function sendDisputeOpenedEmails(
     admin.auth.admin.getUserById(sellerId),
     admin.auth.admin.getUserById(buyerId),
   ]);
-  const sellerEmail = sellerUser?.user?.email;
-  const buyerEmail = buyerUser?.user?.email;
+  const sellerEmail = sellerUser?.data?.user?.email;
+  const buyerEmail = buyerUser?.data?.user?.email;
 
   const reasonLabel = REASON_LABELS[reason] ?? reason;
   const baseParams = {
