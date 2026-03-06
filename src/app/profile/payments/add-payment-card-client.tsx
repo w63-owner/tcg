@@ -21,18 +21,18 @@ function AddCardForm({ onSuccess }: { onSuccess: () => void }) {
     setError(null);
     setLoading(true);
     try {
-      const { error: submitError, setupIntent } = await stripe.confirmSetup({
+      const result = await stripe.confirmSetup({
         elements,
         confirmParams: {
           return_url: `${window.location.origin}/profile/payments?added=1`,
         },
       });
-      if (submitError) {
-        setError(submitError.message ?? "Une erreur est survenue.");
+      if (result.error) {
+        setError(result.error.message ?? "Une erreur est survenue.");
         setLoading(false);
         return;
       }
-      if (setupIntent?.status === "succeeded") {
+      if (result.setupIntent?.status === "succeeded") {
         onSuccess();
       }
       // If status is requires_action, Stripe redirects to return_url; user comes back to profile/payments?added=1
