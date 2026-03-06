@@ -64,13 +64,13 @@ export function FavoriteListingToggle({
       disabled={isPending}
       aria-label={liked ? "Retirer des favoris" : "Ajouter aux favoris"}
       variant={liked ? "secondary" : "outline"}
-      className={`h-8 min-w-12 gap-1 rounded-full px-2 text-xs transition-all duration-200 ${
+      className={`min-h-11 h-11 min-w-11 gap-1.5 rounded-full px-3 text-xs transition-all duration-200 ${
         liked
           ? "border-primary/40 bg-primary/10 text-primary"
           : "text-muted-foreground hover:border-primary/40 hover:bg-primary/10 hover:text-foreground"
       }`}
     >
-      <Heart className={`h-4 w-4 ${liked ? "fill-current" : ""}`} />
+      <Heart className={`size-4 shrink-0 ${liked ? "fill-current" : ""}`} />
       <span>{count}</span>
     </Button>
   );

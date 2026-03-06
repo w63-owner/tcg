@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import type { ComponentType } from "react";
 import { CirclePlus, Heart, House, MessageCircle, User } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
 
 type NavItem = {
   href: string;
@@ -58,9 +57,13 @@ export function MobileNav({ messagesUnreadCount = 0 }: MobileNavProps) {
               <li key={item.href}>
                 <Link
                   href={item.href}
-                  aria-label={item.label}
+                  aria-label={
+                    unread > 0
+                      ? `${item.label} (${unread} non lu${unread > 1 ? "s" : ""})`
+                      : item.label
+                  }
                   className={cn(
-                    "relative flex items-center justify-center rounded-xl px-2 py-2 transition-colors",
+                    "relative flex min-h-11 min-w-11 items-center justify-center rounded-xl px-2 py-2 transition-colors",
                     isSellItem &&
                       "bg-primary/10 font-semibold text-primary shadow-sm",
                     active
@@ -69,15 +72,17 @@ export function MobileNav({ messagesUnreadCount = 0 }: MobileNavProps) {
                     isSellItem && active && "bg-primary text-primary-foreground",
                   )}
                 >
-                  <Icon className="h-5 w-5" />
-                  {unread > 0 ? (
-                    <Badge
-                      variant="destructive"
-                      className="absolute -right-0.5 -top-0.5 h-4 min-w-4 px-0.5 text-[10px]"
-                    >
-                      {unread > 99 ? "99+" : unread}
-                    </Badge>
-                  ) : null}
+                  <span className="relative inline-flex">
+                    <Icon className="h-5 w-5" />
+                    {unread > 0 ? (
+                      <span
+                        className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-medium text-white ring-2 ring-background"
+                        aria-label={`${unread} message${unread > 1 ? "s" : ""} non lu${unread > 1 ? "s" : ""}`}
+                      >
+                        {unread > 99 ? "99+" : unread}
+                      </span>
+                    ) : null}
+                  </span>
                 </Link>
               </li>
             );

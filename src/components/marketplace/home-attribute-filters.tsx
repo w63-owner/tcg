@@ -109,7 +109,7 @@ export function HomeAttributeFilters({
 
   const triggerClass = (active: boolean) =>
     cn(
-      "h-10 w-auto min-w-[10rem] shrink-0",
+      "min-h-11 h-11 w-auto min-w-[10rem] shrink-0",
       active && "border-primary/40 bg-primary/10 text-primary",
     );
 
@@ -265,7 +265,7 @@ export function HomeAttributeFilters({
               handleParamChange("is_graded", value === ALL_OPTION ? "" : value)
             }
           >
-            <SelectTrigger className={cn("h-10 w-auto min-w-[10rem] shrink-0", triggerClass(isGradedActive))}>
+            <SelectTrigger className={cn("min-h-11 h-11 w-auto min-w-[10rem] shrink-0", triggerClass(isGradedActive))}>
               <SelectValue placeholder="Gradation: Toutes cartes" />
             </SelectTrigger>
             <SelectContent>
