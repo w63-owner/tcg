@@ -146,6 +146,8 @@ export async function addFavoriteSeller(formData: FormData) {
   });
 
   revalidatePath("/favorites");
+  const returnPath = String(formData.get("return_path") ?? "").trim();
+  if (returnPath) revalidatePath(returnPath);
 }
 
 export async function removeFavoriteSeller(formData: FormData) {
@@ -181,6 +183,8 @@ export async function removeFavoriteSeller(formData: FormData) {
   });
 
   revalidatePath("/favorites");
+  const returnPath = String(formData.get("return_path") ?? "").trim();
+  if (returnPath) revalidatePath(returnPath);
 }
 
 export async function saveSearch(formData: FormData) {

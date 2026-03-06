@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
-import { Heart } from "lucide-react";
+import { ChevronRight, Heart, Star, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -43,6 +43,15 @@ type FavoriteSellerRow = {
   seller_id: string;
   created_at: string;
   seller: FavoriteSeller | Array<FavoriteSeller> | null;
+};
+
+type SellerDisplayRow = {
+  id: string;
+  username: string;
+  avatar_url: string | null;
+  review_count: number;
+  rating_avg: number;
+  updated_at: string;
 };
 
 type SavedSearchRow = {
@@ -237,7 +246,21 @@ export default async function FavoritesPage() {
     ]);
 
   const favoriteListings = (listingRows ?? []) as FavoriteListingRow[];
-  const favoriteSellers = (sellerRows ?? []) as FavoriteSellerRow[];
+  const favoriteSellerRows = (sellerRows ?? []) as FavoriteSellerRow[];
+  const favoriteSellersWithDisplay = await Promise.all(
+    favoriteSellerRows.map(async (row) => {
+      const { data } = await supabase.rpc("get_seller_display", {
+        p_seller_id: row.seller_id,
+      });
+      const display = (data as SellerDisplayRow[] | null)?.[0] ?? null;
+      return { seller_id: row.seller_id, created_at: row.created_at, display };
+    }),
+  );
+  const favoriteSellers = favoriteSellersWithDisplay.filter((s) => s.display != null) as Array<{
+    seller_id: string;
+    created_at: string;
+    display: SellerDisplayRow;
+  }>;
   const savedSearches = (savedRows ?? []) as SavedSearchRow[];
   const savedSearchesWithMeta = await Promise.all(
     savedSearches.map(async (row) => ({
@@ -376,32 +399,68 @@ export default async function FavoritesPage() {
                   Tu n&apos;as pas encore de vendeur favori.
                 </p>
               ) : (
-                favoriteSellers.map((row) => (
-                  (() => {
-                    const seller = pickOne<FavoriteSeller>(row.seller);
-                    return (
-                      <div
-                        key={row.seller_id}
-                        className="flex items-center justify-between gap-3 rounded-md border p-3"
+                favoriteSellers.map((row) => {
+                  const d = row.display;
+                  return (
+                    <div
+                      key={row.seller_id}
+                      className="flex items-center gap-3 rounded-lg border p-3"
+                    >
+                      <Link
+                        href={`/u/${encodeURIComponent(d.username)}`}
+                        className="hover:bg-muted/50 flex min-w-0 flex-1 items-center gap-3 rounded-lg transition-colors"
                       >
-                        <div className="min-w-0">
-                          <p className="line-clamp-1 text-sm font-medium">
-                            {seller?.username ?? "Vendeur"}
-                          </p>
-                          <p className="text-muted-foreground text-xs">
-                            Pays: {seller?.country_code ?? "--"}
-                          </p>
+                        <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full border bg-muted">
+                          {d.avatar_url ? (
+                            <Image
+                              src={d.avatar_url}
+                              alt=""
+                              fill
+                              sizes="48px"
+                              className="object-cover"
+                            />
+                          ) : (
+                            <span className="flex h-full items-center justify-center text-lg font-medium text-muted-foreground">
+                              {(d.username || "U").slice(0, 1).toUpperCase()}
+                            </span>
+                          )}
                         </div>
-                        <form action={removeFavoriteSeller}>
-                          <input type="hidden" name="seller_id" value={row.seller_id} />
-                          <Button size="sm" variant="outline" type="submit">
-                            Retirer
-                          </Button>
-                        </form>
-                      </div>
-                    );
-                  })()
-                ))
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium truncate">{d.username}</p>
+                          <div className="mt-1 flex items-center gap-2 text-muted-foreground">
+                            <span
+                              className="inline-flex gap-0.5 text-amber-500"
+                              aria-label={`${Number(d.rating_avg)} sur 5`}
+                            >
+                              {[1, 2, 3, 4, 5].map((i) => (
+                                <Star
+                                  key={i}
+                                  className={`size-4 shrink-0 ${i <= Math.round(Number(d.rating_avg)) ? "fill-amber-500" : "fill-transparent"}`}
+                                />
+                              ))}
+                            </span>
+                            <span className="text-xs">
+                              {Number(d.review_count)} avis
+                            </span>
+                          </div>
+                        </div>
+                        <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
+                      </Link>
+                      <form action={removeFavoriteSeller} className="shrink-0">
+                        <input type="hidden" name="seller_id" value={row.seller_id} />
+                        <Button
+                          type="submit"
+                          size="icon"
+                          variant="ghost"
+                          className="text-muted-foreground hover:text-destructive"
+                          aria-label="Retirer des favoris"
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </form>
+                    </div>
+                  );
+                })
               )}
             </CardContent>
           </div>

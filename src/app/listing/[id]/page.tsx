@@ -357,55 +357,6 @@ export default async function ListingPage({
             <p className="text-muted-foreground text-xs">Publiee {formatPostedSince(listing.created_at)}</p>
           </section>
 
-          {sellerDisplay ? (
-            <section className="space-y-3 border-b pb-4">
-              <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
-                Auteur de l&apos;annonce
-              </p>
-              <Link
-                href={`/u/${encodeURIComponent(sellerDisplay.username)}`}
-                className="flex items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50"
-              >
-                <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full border bg-muted">
-                  {sellerDisplay.avatar_url ? (
-                    <Image
-                      src={sellerDisplay.avatar_url}
-                      alt=""
-                      fill
-                      sizes="48px"
-                      className="object-cover"
-                    />
-                  ) : (
-                    <span className="flex h-full items-center justify-center text-lg font-medium text-muted-foreground">
-                      {(sellerDisplay.username || "U").slice(0, 1).toUpperCase()}
-                    </span>
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium truncate">{sellerDisplay.username}</p>
-                  <div className="mt-1 flex items-center gap-2 text-muted-foreground">
-                    <span className="inline-flex gap-0.5 text-amber-500" aria-label={`${Number(sellerDisplay.rating_avg)} sur 5`}>
-                      {[1, 2, 3, 4, 5].map((i) => (
-                        <Star
-                          key={i}
-                          className={`size-4 shrink-0 ${i <= Math.round(Number(sellerDisplay.rating_avg)) ? "fill-amber-500" : "fill-transparent"}`}
-                        />
-                      ))}
-                    </span>
-                    <span className="text-xs">
-                      {Number(sellerDisplay.review_count)} avis
-                    </span>
-                  </div>
-                  <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <Clock className="size-3.5 shrink-0" />
-                    <span>Vu la derniere fois : {formatPostedSince(sellerDisplay.updated_at)}</span>
-                  </div>
-                </div>
-                <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
-              </Link>
-            </section>
-          ) : null}
-
           <section className="space-y-2 border-b pb-4">
             <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
               Etat de la carte
@@ -519,6 +470,55 @@ export default async function ListingPage({
           ) : null}
           {query.saved === "1" ? (
             <p className="text-primary text-sm">Annonce mise a jour.</p>
+          ) : null}
+
+          {sellerDisplay ? (
+            <section className="space-y-3 border-b pb-4">
+              <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+                Auteur de l&apos;annonce
+              </p>
+              <Link
+                href={`/u/${encodeURIComponent(sellerDisplay.username)}`}
+                className="flex items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50"
+              >
+                <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full border bg-muted">
+                  {sellerDisplay.avatar_url ? (
+                    <Image
+                      src={sellerDisplay.avatar_url}
+                      alt=""
+                      fill
+                      sizes="48px"
+                      className="object-cover"
+                    />
+                  ) : (
+                    <span className="flex h-full items-center justify-center text-lg font-medium text-muted-foreground">
+                      {(sellerDisplay.username || "U").slice(0, 1).toUpperCase()}
+                    </span>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium truncate">{sellerDisplay.username}</p>
+                  <div className="mt-1 flex items-center gap-2 text-muted-foreground">
+                    <span className="inline-flex gap-0.5 text-amber-500" aria-label={`${Number(sellerDisplay.rating_avg)} sur 5`}>
+                      {[1, 2, 3, 4, 5].map((i) => (
+                        <Star
+                          key={i}
+                          className={`size-4 shrink-0 ${i <= Math.round(Number(sellerDisplay.rating_avg)) ? "fill-amber-500" : "fill-transparent"}`}
+                        />
+                      ))}
+                    </span>
+                    <span className="text-xs">
+                      {Number(sellerDisplay.review_count)} avis
+                    </span>
+                  </div>
+                  <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Clock className="size-3.5 shrink-0" />
+                    <span>Vu la derniere fois : {formatPostedSince(sellerDisplay.updated_at)}</span>
+                  </div>
+                </div>
+                <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
+              </Link>
+            </section>
           ) : null}
         </aside>
       </section>

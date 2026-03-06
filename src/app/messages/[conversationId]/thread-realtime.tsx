@@ -14,6 +14,7 @@ export function ThreadRealtime({ conversationId }: ThreadRealtimeProps) {
   const router = useRouter();
 
   useEffect(() => {
+    router.refresh();
     let channel: ReturnType<ReturnType<typeof createClient>["channel"]> | null = null;
     const timeoutId = window.setTimeout(() => {
       const supabase = createClient();

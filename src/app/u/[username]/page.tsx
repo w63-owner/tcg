@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
 import { ProfileTabs } from "./profile-tabs";
 import { ProfileHeaderMenu } from "./profile-header-menu";
+import { FollowProfileButton } from "./follow-profile-button";
 
 type PageProps = { params: Promise<{ username: string }> };
 
@@ -16,7 +17,7 @@ export default async function PublicProfilePage({ params }: PageProps) {
   const supabase = await createClient();
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, username, avatar_url, country_code, created_at")
+    .select("id, username, avatar_url, country_code, created_at, bio, instagram_url, facebook_url, tiktok_url")
     .eq("username", decoded)
     .maybeSingle<{
       id: string;
@@ -24,9 +25,27 @@ export default async function PublicProfilePage({ params }: PageProps) {
       avatar_url: string | null;
       country_code: string;
       created_at: string;
+      bio: string | null;
+      instagram_url: string | null;
+      facebook_url: string | null;
+      tiktok_url: string | null;
     }>();
 
   if (!profile) notFound();
+
+  const {
+    data: { user: currentUser },
+  } = await supabase.auth.getUser();
+  let isFollowing = false;
+  if (currentUser && currentUser.id !== profile.id) {
+    const { data: fav } = await supabase
+      .from("favorite_sellers")
+      .select("seller_id")
+      .eq("user_id", currentUser.id)
+      .eq("seller_id", profile.id)
+      .maybeSingle();
+    isFollowing = Boolean(fav);
+  }
 
   const [{ data: listings }, { data: reviewsRows }] = await Promise.all([
     supabase
@@ -86,10 +105,23 @@ export default async function PublicProfilePage({ params }: PageProps) {
           avatarUrl={profile.avatar_url}
           countryCode={profile.country_code}
           createdAt={profile.created_at}
+          bio={profile.bio}
+          instagramUrl={profile.instagram_url}
+          facebookUrl={profile.facebook_url}
+          tiktokUrl={profile.tiktok_url}
           listings={listings ?? []}
           reviews={reviews}
         />
       </div>
+
+      {currentUser && currentUser.id !== profile.id && (
+        <FollowProfileButton
+          sellerId={profile.id}
+          username={profile.username}
+          isFollowing={isFollowing}
+          returnPath={`/u/${encodeURIComponent(profile.username)}`}
+        />
+      )}
     </main>
   );
 }

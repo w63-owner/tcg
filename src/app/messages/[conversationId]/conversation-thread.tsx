@@ -74,7 +74,10 @@ export function ConversationThread({
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    const timeoutId = setTimeout(() => {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }, 150);
+    return () => clearTimeout(timeoutId);
   }, [messages.length]);
 
   const rows = useMemo(() => {

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { MapPin, Calendar, Star } from "lucide-react";
+import { MapPin, Calendar, Star, Instagram, Facebook } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const COUNTRY_LABELS: Record<string, string> = {
@@ -39,6 +39,10 @@ type ProfileTabsProps = {
   avatarUrl: string | null;
   countryCode: string;
   createdAt: string;
+  bio?: string | null;
+  instagramUrl?: string | null;
+  facebookUrl?: string | null;
+  tiktokUrl?: string | null;
   listings: Listing[];
   reviews: ProfileReview[];
 };
@@ -74,11 +78,21 @@ function Stars({ rating }: { rating: number }) {
   );
 }
 
+const TIKTOK_SVG = (
+  <svg viewBox="0 0 24 24" className="size-4 shrink-0" fill="currentColor" aria-hidden>
+    <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z" />
+  </svg>
+);
+
 export function ProfileTabs({
   username,
   avatarUrl,
   countryCode,
   createdAt,
+  bio,
+  instagramUrl,
+  facebookUrl,
+  tiktokUrl,
   listings,
   reviews,
 }: ProfileTabsProps) {
@@ -201,6 +215,49 @@ export function ProfileTabs({
             <Calendar className="size-4 shrink-0" />
             <span>{formatMemberSince(createdAt)}</span>
           </div>
+          {bio?.trim() ? (
+            <p className="text-muted-foreground pt-2 text-sm whitespace-pre-wrap">{bio.trim()}</p>
+          ) : null}
+          {(instagramUrl?.trim() || facebookUrl?.trim() || tiktokUrl?.trim()) ? (
+            <div className="flex flex-wrap gap-3 pt-3">
+              {instagramUrl?.trim() ? (
+                <a
+                  href={instagramUrl.trim()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition-colors"
+                  aria-label="Instagram"
+                >
+                  <Instagram className="size-4" />
+                  Instagram
+                </a>
+              ) : null}
+              {facebookUrl?.trim() ? (
+                <a
+                  href={facebookUrl.trim()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition-colors"
+                  aria-label="Facebook"
+                >
+                  <Facebook className="size-4" />
+                  Facebook
+                </a>
+              ) : null}
+              {tiktokUrl?.trim() ? (
+                <a
+                  href={tiktokUrl.trim()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition-colors"
+                  aria-label="TikTok"
+                >
+                  {TIKTOK_SVG}
+                  TikTok
+                </a>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </TabsContent>
     </Tabs>

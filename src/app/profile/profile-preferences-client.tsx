@@ -6,12 +6,16 @@ import { Moon, Sun } from "lucide-react";
 const THEME_STORAGE_KEY = "profile_theme_dark";
 
 export function ProfilePreferencesClient() {
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(() =>
+    typeof document !== "undefined"
+      ? document.documentElement.classList.contains("dark")
+      : false,
+  );
 
   useEffect(() => {
-    const nextDarkMode = localStorage.getItem(THEME_STORAGE_KEY) === "1";
-    setDarkMode(nextDarkMode);
-    document.documentElement.classList.toggle("dark", nextDarkMode);
+    const stored = localStorage.getItem(THEME_STORAGE_KEY) === "1";
+    setDarkMode(stored);
+    document.documentElement.classList.toggle("dark", stored);
   }, []);
 
   const onToggleDarkMode = (nextValue: boolean) => {
