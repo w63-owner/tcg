@@ -4,6 +4,7 @@ import { ArrowLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { createClient } from "@/lib/supabase/server";
+import { formatTransactionStatusLabel } from "@/lib/listings/status-label";
 
 type TransactionRow = {
   id: string;
@@ -61,7 +62,7 @@ export default async function ProfileTransactionsPage() {
         <h1 className="text-xl font-semibold">Transactions</h1>
       </div>
       <Tabs defaultValue="purchases">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList variant="line" className="grid w-full grid-cols-2">
           <TabsTrigger value="purchases">Achats</TabsTrigger>
           <TabsTrigger value="sales">Ventes</TabsTrigger>
         </TabsList>
@@ -74,7 +75,7 @@ export default async function ProfileTransactionsPage() {
                 <div key={tx.id} className="flex items-center justify-between gap-3 py-3">
                   <div className="min-w-0">
                     <p className="line-clamp-1 text-sm font-medium">{tx.listing_title ?? pickOne(tx.listing)?.title ?? "Annonce"}</p>
-                    <p className="text-muted-foreground text-xs">{formatDate(tx.created_at)} - {tx.status}</p>
+                    <p className="text-muted-foreground text-xs">{formatDate(tx.created_at)} · {formatTransactionStatusLabel(tx.status)}</p>
                   </div>
                   <p className="shrink-0 text-sm font-medium">{tx.total_amount.toFixed(2)} €</p>
                 </div>
@@ -95,7 +96,7 @@ export default async function ProfileTransactionsPage() {
                 >
                   <div className="min-w-0 flex-1">
                     <p className="line-clamp-1 text-sm font-medium">{tx.listing_title ?? pickOne(tx.listing)?.title ?? "Annonce"}</p>
-                    <p className="text-muted-foreground text-xs">{formatDate(tx.created_at)} - {tx.status}</p>
+                    <p className="text-muted-foreground text-xs">{formatDate(tx.created_at)} · {formatTransactionStatusLabel(tx.status)}</p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     <p className="text-sm font-medium">{tx.total_amount.toFixed(2)} €</p>

@@ -19,9 +19,14 @@ import { markAsShippedAction } from "./actions";
 
 type ShippingModalTriggerProps = {
   transactionId: string;
+  /** Optional class for the trigger button (e.g. "w-full"). */
+  triggerClassName?: string;
 };
 
-export function ShippingModalTrigger({ transactionId }: ShippingModalTriggerProps) {
+export function ShippingModalTrigger({
+  transactionId,
+  triggerClassName,
+}: ShippingModalTriggerProps) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
@@ -42,7 +47,7 @@ export function ShippingModalTrigger({ transactionId }: ShippingModalTriggerProp
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button>Marquer comme expédié</Button>
+        <Button className={triggerClassName}>Marquer comme expédié</Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
@@ -74,8 +79,9 @@ export function ShippingModalTrigger({ transactionId }: ShippingModalTriggerProp
             <Input
               id="tracking_url"
               name="tracking_url"
-              type="url"
-              placeholder="https://..."
+              type="text"
+              inputMode="url"
+              placeholder="https://... ou www.xxx.com"
               disabled={isPending}
               className="w-full"
             />

@@ -36,6 +36,7 @@ export async function GET(request: Request) {
         filters,
         page,
         pageSize,
+        excludeSellerId: user.id,
       })
     : await getPublicFeedCached({
         filters,

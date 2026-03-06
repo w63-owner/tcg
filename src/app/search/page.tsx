@@ -1,6 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
 import { MarketplaceSearchPageForm } from "@/components/marketplace/search-page-form";
-import { SearchPageToast } from "@/components/marketplace/search-page-toast";
 
 type SearchParams = {
   q?: string;
@@ -118,8 +117,6 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
   return (
     <section className="space-y-4">
-      <SearchPageToast />
-
       <MarketplaceSearchPageForm
         backHref="/"
         query={query}

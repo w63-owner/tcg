@@ -225,7 +225,7 @@ export async function createListingAction(
 
     revalidatePath("/");
     revalidatePath("/profile");
-    redirect(`/search?published=1&listing_id=${data.id}`);
+    redirect(`/?published=1&listing_id=${data.id}`);
   } catch (error) {
     const maybeRedirect = error as { digest?: string };
     if (typeof maybeRedirect?.digest === "string" && maybeRedirect.digest.startsWith("NEXT_REDIRECT")) {

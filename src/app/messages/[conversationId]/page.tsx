@@ -11,6 +11,7 @@ import { OfferModal } from "./offer-modal";
 import { AcceptOfferForm } from "./accept-offer-form";
 import { BuyReservedForm } from "./buy-reserved-form";
 import { TrackingCard } from "./receipt-action-client";
+import { ShippingModalTrigger } from "@/app/profile/sales/shipping-modal-client";
 
 type ConversationRow = {
   id: string;
@@ -120,22 +121,58 @@ export default async function MessagesThreadPage({
     .eq("status", "PENDING")
     .maybeSingle<{ id: string }>();
 
+  const { data: paidTransactionRow } = await supabase
+    .from("transactions")
+    .select("id")
+    .eq("listing_id", conversation.listing_id)
+    .eq("buyer_id", conversation.buyer_id)
+    .eq("seller_id", conversation.seller_id)
+    .eq("status", "PAID")
+    .limit(1)
+    .maybeSingle<{ id: string }>();
+
   const rows = (messages ?? []) as MessageRow[];
   const counterpart =
     conversation.buyer_id === user.id
-      ? conversation.seller?.[0]?.username
-      : conversation.buyer?.[0]?.username;
+      ? pickOne(conversation.seller)?.username
+      : pickOne(conversation.buyer)?.username;
   const counterpartUserId =
     conversation.buyer_id === user.id ? conversation.seller_id : conversation.buyer_id;
-  const listing = pickOne(conversation.listing);
+
+  let listing = pickOne(conversation.listing);
+  if (!listing && conversation.listing_id) {
+    const { data: rpcListingRows } = await supabase.rpc("get_listing_for_conversation", {
+      p_conversation_id: conversationId,
+    });
+    const first = Array.isArray(rpcListingRows) ? rpcListingRows[0] : rpcListingRows;
+    if (first) {
+      const price =
+        typeof first.display_price === "number"
+          ? first.display_price
+          : Number(first.display_price);
+      listing = {
+        id: first.id,
+        title: first.title,
+        cover_image_url: first.cover_image_url,
+        display_price: Number.isFinite(price) ? price : null,
+        status: first.status,
+      };
+    }
+  }
+
   const listingPrice = listing?.display_price ?? null;
   const canOffer = Boolean(listing && user.id !== conversation.seller_id);
   const basePrice = typeof listingPrice === "number" ? listingPrice : 0;
   const acceptedOfferId = acceptedOfferRow?.id ?? null;
   const hasPendingOfferFromBuyer = Boolean(pendingOfferRow?.id);
+  const hasPaidTransaction = Boolean(paidTransactionRow?.id);
   const isSeller = user.id === conversation.seller_id;
   const isBuyer = user.id === conversation.buyer_id;
-  const showOfferButton = canOffer && !hasPendingOfferFromBuyer;
+  const listingAvailableForOffer =
+    listing && listing.status !== "SOLD" && listing.status !== "LOCKED";
+  const listingAlreadySold = listing?.status === "SOLD";
+  const showOfferButton =
+    canOffer && !hasPendingOfferFromBuyer && Boolean(listingAvailableForOffer);
 
   let shippedTransaction: {
     id: string;
@@ -162,8 +199,29 @@ export default async function MessagesThreadPage({
     shippedTransaction = txRow ?? null;
   }
 
+  const showShippingButton = Boolean(isSeller && paidTransactionRow?.id);
+  const showOfferBar = Boolean(
+    listing && basePrice > 0 && showOfferButton,
+  );
+  const showBuyReservedBar = Boolean(
+    acceptedOfferId && !isSeller && !hasPaidTransaction && !listingAlreadySold,
+  );
+  const showReceiptConfirmBar = Boolean(isBuyer && shippedTransaction);
+  const extraBottomBars = [
+    showShippingButton,
+    showOfferBar,
+    showBuyReservedBar,
+    showReceiptConfirmBar,
+  ].filter(Boolean).length;
+  const bottomPadding =
+    extraBottomBars > 0
+      ? `pb-[calc(${8.5 + extraBottomBars * 3.5}rem+var(--safe-area-bottom))]`
+      : "pb-[calc(8.5rem+var(--safe-area-bottom))]";
+
   return (
-    <section className="flex min-h-[calc(100dvh-8rem)] flex-col gap-3 pb-[calc(8.5rem+var(--safe-area-bottom))] md:pb-0">
+    <section
+      className={`flex min-h-[calc(100dvh-8rem)] flex-col gap-3 md:pb-0 ${bottomPadding}`}
+    >
       <ThreadRealtime conversationId={conversation.id} />
 
       <header className="relative flex items-center justify-center">
@@ -173,7 +231,11 @@ export default async function MessagesThreadPage({
           </Link>
         </Button>
         <Link
-          href={`/messages/${conversation.id}/profile`}
+          href={
+            counterpart
+              ? `/u/${encodeURIComponent(counterpart)}`
+              : `/messages/${conversation.id}/profile`
+          }
           className="text-center text-sm font-semibold hover:underline"
         >
           {counterpart ?? "Utilisateur"}
@@ -213,46 +275,56 @@ export default async function MessagesThreadPage({
         )}
       </div>
 
-      {isBuyer && shippedTransaction ? (
-        <div className="shrink-0">
-          <TrackingCard transaction={shippedTransaction} />
-        </div>
-      ) : null}
-
       <div className="flex-1 overflow-hidden">
         <div className="h-full pt-3">
           <ConversationThread
             messages={rows}
             currentUserId={user.id}
             sellerId={conversation.seller_id}
+            buyerUsername={pickOne(conversation.buyer)?.username ?? null}
           />
         </div>
       </div>
 
-      {acceptedOfferId && !isSeller ? (
-        <div className="border-border/70 flex flex-col gap-2 border-t bg-background/95 px-4 py-2 md:rounded-md md:border md:p-2">
-          <BuyReservedForm offerId={acceptedOfferId} />
-        </div>
-      ) : null}
-
-      {listing && basePrice > 0 && showOfferButton ? (
-        <div className="border-border/70 flex flex-col gap-2 border-t bg-background/95 px-4 py-2 md:rounded-md md:border md:p-2">
-          <OfferModal
+      <div className="fixed inset-x-0 bottom-0 z-40 flex flex-col backdrop-blur md:static md:rounded-md">
+        {showShippingButton ? (
+          <div className="bg-background/95 px-4 py-2 md:px-4 md:py-2">
+            <ShippingModalTrigger
+              transactionId={paidTransactionRow!.id}
+              triggerClassName="w-full"
+            />
+          </div>
+        ) : null}
+        {showOfferBar ? (
+          <div className="bg-background/95 px-4 py-2 md:px-4 md:py-2">
+            <OfferModal
+              conversationId={conversation.id}
+              listingId={listing!.id}
+              listingTitle={listing!.title}
+              listingCoverUrl={listing!.cover_image_url ?? undefined}
+              basePrice={basePrice}
+              canOffer={true}
+            />
+          </div>
+        ) : null}
+        {showBuyReservedBar ? (
+          <div className="bg-background/95 px-4 py-2 md:px-4 md:py-2">
+            <BuyReservedForm offerId={acceptedOfferId!} />
+          </div>
+        ) : null}
+        {showReceiptConfirmBar && shippedTransaction ? (
+          <div className="bg-background/95 px-4 py-2 md:px-4 md:py-2">
+            <TrackingCard transaction={shippedTransaction} />
+          </div>
+        ) : null}
+        <div className="bg-background/95 px-4 pt-2 pb-[max(0.75rem,var(--safe-area-bottom))] md:p-2">
+          <ConversationLiveControls
             conversationId={conversation.id}
-            listingId={listing.id}
-            basePrice={basePrice}
-            canOffer={true}
+            currentUserId={user.id}
+            counterpartUserId={counterpartUserId}
+            counterpartName={counterpart ?? "Utilisateur"}
           />
         </div>
-      ) : null}
-
-      <div className="border-border/70 fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 px-4 pt-2 pb-[max(0.75rem,var(--safe-area-bottom))] backdrop-blur md:static md:rounded-md md:border md:p-2">
-        <ConversationLiveControls
-          conversationId={conversation.id}
-          currentUserId={user.id}
-          counterpartUserId={counterpartUserId}
-          counterpartName={counterpart ?? "Utilisateur"}
-        />
       </div>
     </section>
   );

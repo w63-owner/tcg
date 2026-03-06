@@ -3,13 +3,13 @@
 import { startTransition, useActionState, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowLeft, Camera, Check } from "lucide-react";
+import { ArrowLeft, Camera, Check, CircleHelp } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -21,7 +21,8 @@ import {
 import { ListingImageCarousel } from "@/components/listing/listing-image-carousel";
 import { createListingAction } from "./actions";
 import { initialSellFormState } from "./sell-form-state";
-import { formatConditionLabel } from "@/lib/listings/condition-label";
+import { formatConditionLabel, CONDITION_DEFINITIONS } from "@/lib/listings/condition-label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 const CONDITIONS = [
   "MINT",
@@ -1294,13 +1295,13 @@ export function SellForm() {
                 <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
                   Etat et gradation
                 </p>
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <Checkbox
+                <div className="flex items-center justify-between gap-2 text-sm font-medium">
+                  <Label htmlFor="is_graded">Carte gradee</Label>
+                  <Switch
                     id="is_graded"
                     checked={isGraded}
-                    onCheckedChange={(checked) => setIsGraded(Boolean(checked))}
+                    onCheckedChange={setIsGraded}
                   />
-                  <Label htmlFor="is_graded">Carte gradee</Label>
                 </div>
 
                 {isGraded ? (
@@ -1349,9 +1350,42 @@ export function SellForm() {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <Label htmlFor="condition" className={FORM_LABEL_CLASS}>
-                      Etat
-                    </Label>
+                    <div className="flex items-center gap-1.5">
+                      <Label htmlFor="condition" className={FORM_LABEL_CLASS}>
+                        Etat
+                      </Label>
+                      <Popover>
+                        <PopoverTrigger
+                          type="button"
+                          className="text-muted-foreground hover:text-foreground rounded-full p-0.5 transition-colors"
+                          aria-label="Définitions des états"
+                        >
+                          <CircleHelp className="size-3.5" />
+                        </PopoverTrigger>
+                        <PopoverContent className="w-80 p-0" align="start">
+                          <div className="border-b px-3 py-2">
+                            <p className="text-foreground text-sm font-medium">
+                              Définitions des états
+                            </p>
+                          </div>
+                          <ul className="max-h-[min(60vh,24rem)] overflow-y-auto px-3 py-2">
+                            {CONDITIONS.map((condition) => (
+                              <li
+                                key={condition}
+                                className="border-b border-border/60 py-2 last:border-0"
+                              >
+                                <p className="text-foreground text-sm font-medium">
+                                  {formatConditionLabel(condition)}
+                                </p>
+                                <p className="text-muted-foreground mt-0.5 text-xs">
+                                  {CONDITION_DEFINITIONS[condition] ?? "—"}
+                                </p>
+                              </li>
+                            ))}
+                          </ul>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
                     <Select
                       value={conditionValue}
                       onValueChange={setConditionValue}

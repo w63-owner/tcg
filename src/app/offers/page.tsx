@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireAuthenticatedUser } from "@/lib/auth/require-authenticated-user";
+import { formatListingStatusLabel, formatOfferStatusLabel } from "@/lib/listings/status-label";
 import {
   cancelSentOfferAction,
   respondToOfferAction,
@@ -29,6 +30,21 @@ type OfferRow = {
 type SearchParams = {
   error?: string;
   checkout?: string;
+  /** En dev uniquement : détail de l’erreur serveur (ex. stripe_session_exception). */
+  error_detail?: string;
+};
+
+const ERROR_MESSAGES: Record<string, string> = {
+  email_required:
+    "Un email est requis pour effectuer le paiement. Ajoute-le dans ton profil ou vérifie ton compte.",
+  stripe_session_exception:
+    "Impossible d'ouvrir la page de paiement. Vérifie que ton email est renseigné dans ton profil, puis réessaie.",
+  stripe_session_failed: "La session de paiement n'a pas pu être créée. Réessaie.",
+  checkout_lock_failed: "L'annonce n'a pas pu être réservée. Réessaie ou rafraîchis la page.",
+  offer_not_found: "Offre introuvable.",
+  offer_not_accepted: "Cette offre n'est plus acceptée.",
+  listing_not_available: "L'annonce n'est plus disponible.",
+  forbidden: "Action non autorisée.",
 };
 
 function formatMoney(value: number) {
@@ -83,9 +99,14 @@ export default async function OffersPage({ searchParams }: OffersPageProps) {
         </p>
       </header>
       {params.error ? (
-        <p className="text-destructive rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
-          Action impossible: {params.error}
-        </p>
+        <div className="text-destructive space-y-1 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
+          <p>{ERROR_MESSAGES[params.error] ?? `Action impossible: ${params.error}`}</p>
+          {params.error_detail ? (
+            <p className="text-muted-foreground mt-2 border-t border-destructive/20 pt-2 text-xs">
+              Détail (dev) : {params.error_detail}
+            </p>
+          ) : null}
+        </div>
       ) : null}
       {params.checkout === "cancelled" ? (
         <p className="rounded-md border p-3 text-sm">
@@ -126,7 +147,7 @@ export default async function OffersPage({ searchParams }: OffersPageProps) {
                     <p className="line-clamp-1 text-sm font-medium">
                       {offer.listing?.[0]?.title ?? "Annonce"}
                     </p>
-                    <Badge variant={statusVariant(offer.status)}>{offer.status}</Badge>
+                    <Badge variant={statusVariant(offer.status)}>{formatOfferStatusLabel(offer.status)}</Badge>
                   </div>
                   <p className="text-sm">Montant: {formatMoney(Number(offer.offer_amount))}</p>
                   <p className="text-muted-foreground text-xs">
@@ -172,11 +193,11 @@ export default async function OffersPage({ searchParams }: OffersPageProps) {
                     <p className="line-clamp-1 text-sm font-medium">
                       {offer.listing?.[0]?.title ?? "Annonce"}
                     </p>
-                    <Badge variant={statusVariant(offer.status)}>{offer.status}</Badge>
+                    <Badge variant={statusVariant(offer.status)}>{formatOfferStatusLabel(offer.status)}</Badge>
                   </div>
                   <p className="text-sm">Montant: {formatMoney(Number(offer.offer_amount))}</p>
                   <p className="text-muted-foreground text-xs">
-                    Annonce: {offer.listing?.[0]?.status ?? "UNKNOWN"}
+                    Annonce: {formatListingStatusLabel(offer.listing?.[0]?.status)}
                   </p>
                   {offer.status === "PENDING" ? (
                     <form action={cancelSentOfferAction}>

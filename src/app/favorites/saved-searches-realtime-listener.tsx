@@ -31,18 +31,25 @@ export function SavedSearchesRealtimeListener({
   }, [totalNewMatches]);
 
   useEffect(() => {
-    const supabase = createClient();
-    const channel = supabase
-      .channel("saved-searches-listener")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "listings" },
-        () => router.refresh(),
-      )
-      .subscribe();
+    let channel: ReturnType<ReturnType<typeof createClient>["channel"]> | null = null;
+    const timeoutId = window.setTimeout(() => {
+      const supabase = createClient();
+      channel = supabase
+        .channel("saved-searches-listener")
+        .on(
+          "postgres_changes",
+          { event: "INSERT", schema: "public", table: "listings" },
+          () => router.refresh(),
+        )
+        .subscribe();
+    }, 400);
 
     return () => {
-      void supabase.removeChannel(channel);
+      window.clearTimeout(timeoutId);
+      if (channel) {
+        const supabase = createClient();
+        void supabase.removeChannel(channel);
+      }
     };
   }, [router]);
 

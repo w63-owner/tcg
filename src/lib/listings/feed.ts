@@ -91,8 +91,10 @@ export async function fetchListingsFeedPage(params: {
   filters: FeedFilters;
   page: number;
   pageSize: number;
+  /** When set, listings from this seller are excluded (e.g. current user's own listings). */
+  excludeSellerId?: string;
 }) {
-  const { supabase, filters, page, pageSize } = params;
+  const { supabase, filters, page, pageSize, excludeSellerId } = params;
   const totalStart = performance.now();
   const cardFilterStart = performance.now();
 
@@ -138,6 +140,9 @@ export async function fetchListingsFeedPage(params: {
       "id, title, cover_image_url, price_seller, display_price, condition, is_graded, grading_company, grade_note, card_ref_id, created_at, tcgdex_cards:card_ref_id(language)",
     )
     .eq("status", "ACTIVE");
+  if (excludeSellerId) {
+    request = request.neq("seller_id", excludeSellerId);
+  }
   let tieBreakAscending = false;
 
   if (filters.q) {

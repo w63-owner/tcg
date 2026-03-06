@@ -80,20 +80,35 @@ export function CheckoutFormClient({
 
   const total = Math.round((displayPrice + shippingCost) * 100) / 100;
 
-  // Pre-fill address from profile (Profil > Adresse), stored in localStorage
+  // Pre-fill full address from profile (Profil → Profil → Adresse), same localStorage key
   useEffect(() => {
     try {
       const raw = typeof window !== "undefined" ? localStorage.getItem(PROFILE_DETAILS_STORAGE_KEY(buyerId)) : null;
       if (raw) {
-        const parsed = JSON.parse(raw) as { address?: string; addressCity?: string; addressPostcode?: string };
+        const parsed = JSON.parse(raw) as {
+          address?: string;
+          addressCity?: string;
+          addressPostcode?: string;
+          countryCode?: string;
+        };
         if (typeof parsed.address === "string" && parsed.address.trim()) setAddress(parsed.address.trim());
         if (typeof parsed.addressCity === "string" && parsed.addressCity.trim()) setCity(parsed.addressCity.trim());
-        if (typeof parsed.addressPostcode === "string" && parsed.addressPostcode.trim()) setPostcode(parsed.addressPostcode.trim());
+        if (typeof parsed.addressPostcode === "string" && parsed.addressPostcode.trim())
+          setPostcode(parsed.addressPostcode.trim());
+        if (
+          typeof parsed.countryCode === "string" &&
+          COUNTRY_OPTIONS.some((c) => c.value === parsed.countryCode)
+        ) {
+          setCountryCode(parsed.countryCode);
+          getShippingCostForCountry(listingId, parsed.countryCode).then((result) => {
+            if (!result.error) setShippingCost(result.shippingCost);
+          });
+        }
       }
     } catch {
       // ignore
     }
-  }, [buyerId]);
+  }, [buyerId, listingId]);
 
   const handleCountryChange = async (newCountry: string) => {
     setCountryCode(newCountry);
@@ -110,7 +125,7 @@ export function CheckoutFormClient({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Persist address to profile localStorage (Profil > Adresse) so it stays in sync
+    // Persist full address to same localStorage as Profil → Profil → Adresse
     try {
       const key = PROFILE_DETAILS_STORAGE_KEY(buyerId);
       const existing = typeof window !== "undefined" ? localStorage.getItem(key) : null;
@@ -122,6 +137,7 @@ export function CheckoutFormClient({
           address: address.trim(),
           addressCity: city.trim(),
           addressPostcode: postcode.trim(),
+          countryCode,
         }),
       );
     } catch {
@@ -169,7 +185,7 @@ export function CheckoutFormClient({
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Adresse de livraison</CardTitle>
           <CardDescription>
-            Adresse enregistrée dans ton profil (Profil → Adresse). Tu peux la modifier ici ; le pays détermine les frais de port.
+            Préremplie depuis ton profil (Profil → Profil → Adresse). Tu peux modifier ici ; le pays détermine les frais de port.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

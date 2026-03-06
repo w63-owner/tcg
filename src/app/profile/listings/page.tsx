@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { ArrowLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
+import { formatListingStatusLabel } from "@/lib/listings/status-label";
 
 type ListingRow = {
   id: string;
@@ -50,7 +51,7 @@ export default async function ProfileListingsPage() {
               <div className="min-w-0">
                 <p className="line-clamp-1 text-sm font-medium">{listing.title}</p>
                 <p className="text-muted-foreground text-xs">
-                  {listing.display_price?.toFixed(2) ?? "--.--"} € - {listing.status}
+                  {listing.display_price?.toFixed(2) ?? "--.--"} € · {formatListingStatusLabel(listing.status)}
                 </p>
               </div>
               <ChevronRight className="text-muted-foreground h-4 w-4 shrink-0" />

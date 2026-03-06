@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CheckCircle2, Home, Loader2, ShoppingBag } from "lucide-react";
+import { CheckCircle2, Home, Loader2, MessageCircle, ShoppingBag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -98,7 +98,15 @@ export default async function OrderSuccessPage({ params }: PageProps) {
       )}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-        <Button asChild variant="default">
+        {data.conversationId ? (
+          <Button asChild variant="default">
+            <Link href={`/messages/${data.conversationId}`} className="inline-flex items-center gap-2">
+              <MessageCircle className="h-4 w-4" />
+              Voir la conversation
+            </Link>
+          </Button>
+        ) : null}
+        <Button asChild variant={data.conversationId ? "outline" : "default"}>
           <Link href="/profile/transactions" className="inline-flex items-center gap-2">
             <ShoppingBag className="h-4 w-4" />
             Voir mes achats

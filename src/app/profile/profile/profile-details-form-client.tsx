@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -11,12 +12,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { updateProfileSocialLinks } from "./actions";
 
 type ProfileDetailsFormClientProps = {
   userId: string;
   initialPhone: string;
   email: string;
   username: string;
+  initialBio?: string;
+  initialInstagramUrl?: string;
+  initialFacebookUrl?: string;
+  initialTiktokUrl?: string;
 };
 
 type LocalProfileDetails = {
@@ -82,6 +88,10 @@ export function ProfileDetailsFormClient({
   initialPhone,
   email,
   username,
+  initialBio = "",
+  initialInstagramUrl = "",
+  initialFacebookUrl = "",
+  initialTiktokUrl = "",
 }: ProfileDetailsFormClientProps) {
   const [address, setAddress] = useState("");
   const [addressCity, setAddressCity] = useState("");
@@ -93,6 +103,10 @@ export function ProfileDetailsFormClient({
   const [isAddressLoading, setIsAddressLoading] = useState(false);
   const [dialCode, setDialCode] = useState("+33");
   const [phoneLocal, setPhoneLocal] = useState("");
+  const [bio, setBio] = useState(initialBio);
+  const [instagramUrl, setInstagramUrl] = useState(initialInstagramUrl);
+  const [facebookUrl, setFacebookUrl] = useState(initialFacebookUrl);
+  const [tiktokUrl, setTiktokUrl] = useState(initialTiktokUrl);
   const [hydrated, setHydrated] = useState(false);
 
   const storageKey = useMemo(() => getStorageKey(userId), [userId]);
@@ -195,7 +209,7 @@ export function ProfileDetailsFormClient({
     };
   }, [address, hydrated]);
 
-  const onSave = () => {
+  const onSave = async () => {
     const phoneE164 = buildPhoneE164(dialCode, phoneLocal);
     const payload: LocalProfileDetails = {
       address: address.trim(),
@@ -210,12 +224,23 @@ export function ProfileDetailsFormClient({
       phone: phoneE164,
     };
     localStorage.setItem(storageKey, JSON.stringify(payload));
-    toast.success("Informations enregistrees.");
+
+    const formData = new FormData();
+    formData.set("bio", bio.trim());
+    formData.set("instagram_url", instagramUrl.trim());
+    formData.set("facebook_url", facebookUrl.trim());
+    formData.set("tiktok_url", tiktokUrl.trim());
+    const result = await updateProfileSocialLinks(formData);
+    if (result.success) {
+      toast.success("Informations enregistrees.");
+    } else {
+      toast.error(result.error);
+    }
   };
 
   return (
     <div className="flex min-h-[calc(100dvh-18rem)] flex-col">
-      <div className="space-y-3">
+      <div className="space-y-3 pb-24 md:pb-0">
         <div className="space-y-1">
           <p className="text-muted-foreground text-xs">Adresse</p>
           <div className="relative">
@@ -299,10 +324,55 @@ export function ProfileDetailsFormClient({
           <p className="text-muted-foreground text-xs">Username</p>
           <p className="text-sm">{username}</p>
         </div>
+        <div className="space-y-1">
+          <p className="text-muted-foreground text-xs">Bio</p>
+          <Textarea
+            value={bio}
+            onChange={(e) => setBio(e.target.value)}
+            placeholder="Bonjour, je m'appelle Jean je suis collectionneur depuis 20 ans, j'ai une grosse communauté sur instagram, et je vends souvent des pièces rares, n'hésitez pas à vous abonner."
+            className="min-h-[100px] resize-y border border-border bg-transparent text-sm focus-visible:ring-0 focus-visible:border-ring"
+            disabled={!hydrated}
+          />
+        </div>
+        <div className="space-y-1">
+          <p className="text-muted-foreground text-xs">Instagram</p>
+          <Input
+            value={instagramUrl}
+            onChange={(e) => setInstagramUrl(e.target.value)}
+            placeholder="https://instagram.com/... ou www.instagram.com/..."
+            className="border-0 border-b border-border bg-transparent px-0 shadow-none rounded-none text-sm focus-visible:ring-0 focus-visible:border-b focus-visible:border-ring"
+            disabled={!hydrated}
+          />
+        </div>
+        <div className="space-y-1">
+          <p className="text-muted-foreground text-xs">Facebook</p>
+          <Input
+            value={facebookUrl}
+            onChange={(e) => setFacebookUrl(e.target.value)}
+            placeholder="https://facebook.com/... ou www.facebook.com/..."
+            className="border-0 border-b border-border bg-transparent px-0 shadow-none rounded-none text-sm focus-visible:ring-0 focus-visible:border-b focus-visible:border-ring"
+            disabled={!hydrated}
+          />
+        </div>
+        <div className="space-y-1">
+          <p className="text-muted-foreground text-xs">TikTok</p>
+          <Input
+            value={tiktokUrl}
+            onChange={(e) => setTiktokUrl(e.target.value)}
+            placeholder="https://tiktok.com/@... ou www.tiktok.com/@..."
+            className="border-0 border-b border-border bg-transparent px-0 shadow-none rounded-none text-sm focus-visible:ring-0 focus-visible:border-b focus-visible:border-ring"
+            disabled={!hydrated}
+          />
+        </div>
       </div>
-      <Button type="button" onClick={onSave} className="mt-auto w-full" disabled={!hydrated}>
-        Enregistrer
-      </Button>
+      {/* Sur mobile: bouton fixe juste au-dessus de la nav. Sur desktop: dans le flux. */}
+      <div className="fixed inset-x-0 bottom-[calc(2.75rem+var(--safe-area-bottom))] z-30 bg-background px-4 pt-2 md:static md:inset-auto md:bottom-auto md:mt-auto md:px-0 md:pt-3">
+        <div className="mx-auto max-w-7xl">
+          <Button type="button" onClick={onSave} className="w-full" disabled={!hydrated}>
+            Enregistrer
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

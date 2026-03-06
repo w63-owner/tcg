@@ -59,6 +59,47 @@ function formatRelativeTime(value: string) {
   return `il y a ${diffYears} an${diffYears > 1 ? "s" : ""}`;
 }
 
+/** Returns user-friendly preview text for the latest message (e.g. system/offer_accepted). */
+function getMessagePreview(
+  content: string,
+  options: { currentUserId: string; sellerId: string },
+): string {
+  try {
+    const data = JSON.parse(content) as {
+      type?: string;
+      offer_amount?: number;
+      total_amount?: number;
+    };
+    if (data.type === "offer_accepted") {
+      const isSeller = options.currentUserId === options.sellerId;
+      return isSeller
+        ? "Vous avez accepté l'offre."
+        : "Le vendeur a accepté votre offre.";
+    }
+    if (data.type === "payment_completed") {
+      const isSeller = options.currentUserId === options.sellerId;
+      return isSeller
+        ? "L'acheteur a effectué le paiement."
+        : "Paiement effectué.";
+    }
+    if (data.type === "order_shipped") {
+      const isSeller = options.currentUserId === options.sellerId;
+      return isSeller
+        ? "Vous avez marqué la commande comme expédiée."
+        : "Commande expédiée.";
+    }
+    if (data.type === "sale_completed") {
+      const isSeller = options.currentUserId === options.sellerId;
+      return isSeller
+        ? "Vente terminée. Solde crédité."
+        : "Vente terminée.";
+    }
+  } catch {
+    /* not JSON, use as-is */
+  }
+  return content;
+}
+
 export default async function MessagesPage({ searchParams }: MessagesPageProps) {
   const params = await searchParams;
   const { supabase, user } = await requireAuthenticatedUser("/messages");
@@ -74,6 +115,30 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
 
   const conversations = (data ?? []) as ConversationRow[];
   const conversationIds = conversations.map((conversation) => conversation.id);
+
+  const listingByConversationId = new Map<
+    string,
+    { id: string; title: string; cover_image_url: string | null }
+  >();
+  if (conversationIds.length > 0) {
+    const { data: batchListings } = await supabase.rpc("get_listings_for_conversations", {
+      p_conversation_ids: conversationIds,
+    });
+    const rows = (batchListings ?? []) as Array<{
+      conversation_id: string;
+      id: string;
+      title: string;
+      cover_image_url: string | null;
+    }>;
+    for (const row of rows) {
+      listingByConversationId.set(row.conversation_id, {
+        id: row.id,
+        title: row.title,
+        cover_image_url: row.cover_image_url,
+      });
+    }
+  }
+
   const unreadCountsByConversation = new Map<string, number>();
   const latestByConversation = new Map<string, Omit<MessagePreview, "conversation_id">>();
 
@@ -111,8 +176,8 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
   const details = conversations.map((conversation) => {
     const counterpart =
       conversation.buyer_id === user.id
-        ? conversation.seller?.[0]?.username
-        : conversation.buyer?.[0]?.username;
+        ? pickOne(conversation.seller)?.username
+        : pickOne(conversation.buyer)?.username;
     const latestMessage = latestByConversation.get(conversation.id) ?? null;
 
     return {
@@ -150,7 +215,10 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
         <div className="divide-border/60 divide-y">
           {conversationsWithMessages.map((conversation) => (
             (() => {
-              const listing = pickOne(conversation.listing);
+              const listing =
+                pickOne(conversation.listing) ??
+                listingByConversationId.get(conversation.id) ??
+                null;
               return (
                 <Link
                   key={conversation.id}
@@ -177,14 +245,21 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
                       {listing?.title ?? "Annonce"}
                     </p>
                     <p className="text-muted-foreground line-clamp-1 text-xs">
-                      {conversation.latestMessage?.content}
+                      {conversation.latestMessage
+                        ? getMessagePreview(conversation.latestMessage.content, {
+                            currentUserId: user.id,
+                            sellerId: conversation.seller_id,
+                          })
+                        : null}
                     </p>
                     <p className="text-muted-foreground line-clamp-1 text-xs">
                       {conversation.counterpart} · {conversation.relativeTime}
                     </p>
                   </div>
                   {conversation.unreadCount > 0 ? (
-                    <Badge>{conversation.unreadCount}</Badge>
+                    <Badge className="shrink-0 self-center">
+                      {conversation.unreadCount}
+                    </Badge>
                   ) : null}
                 </Link>
               );

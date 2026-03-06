@@ -133,6 +133,15 @@ export async function startCheckoutAction(formData: FormData) {
 
     redirect(session.url);
   } catch (error) {
+    const isRedirect =
+      typeof error === "object" &&
+      error !== null &&
+      "digest" in error &&
+      typeof (error as { digest?: string }).digest === "string" &&
+      (error as { digest: string }).digest.startsWith("NEXT_REDIRECT");
+    if (isRedirect) {
+      throw error;
+    }
     await supabase.rpc("cancel_pending_transaction_and_unlock_listing", {
       p_transaction_id: transactionId,
     });

@@ -186,16 +186,21 @@ function ReceiptConfirmationModal({
                 La carte correspond-elle à l&apos;annonce ?
               </DialogDescription>
             </DialogHeader>
-            <DialogFooter className="flex-row gap-2 sm:justify-end">
+            <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                className="w-full sm:w-auto"
+                onClick={() => handleChoice(true)}
+              >
+                Oui, tout est ok
+              </Button>
               <Button
                 type="button"
                 variant="outline"
+                className="w-full sm:w-auto"
                 onClick={() => handleChoice(false)}
               >
                 Non, j&apos;ai un problème
-              </Button>
-              <Button type="button" onClick={() => handleChoice(true)}>
-                Oui, tout est ok
               </Button>
             </DialogFooter>
           </>

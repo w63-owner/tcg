@@ -89,10 +89,14 @@ export async function respondToOfferAction(formData: FormData) {
     const conversationId = convId as string | null;
 
     if (conversationId && fullOffer) {
+      const systemContent = JSON.stringify({
+        type: "offer_accepted",
+        offer_amount: fullOffer.offer_amount,
+      });
       await supabase.from("messages").insert({
         conversation_id: conversationId,
         sender_id: user.id,
-        content: "Votre offre a été acceptée, vous pouvez passer au paiement.",
+        content: systemContent,
         message_type: "system",
       });
     }
@@ -137,20 +141,22 @@ export async function cancelSentOfferAction(formData: FormData) {
   revalidatePath("/offers");
 }
 
+type OfferCheckoutListing = {
+  id: string;
+  title: string;
+  seller_id: string;
+  status: string;
+  delivery_weight_class: string;
+  reserved_for: string | null;
+};
+
 type OfferCheckoutRow = {
   id: string;
   listing_id: string;
   buyer_id: string;
   offer_amount: number;
   status: string;
-  listing: Array<{
-    id: string;
-    title: string;
-    seller_id: string;
-    status: string;
-    delivery_weight_class: string;
-    reserved_for: string | null;
-  }> | null;
+  listing: OfferCheckoutListing | Array<OfferCheckoutListing> | null;
 };
 
 type CheckoutLockResult = {
@@ -173,7 +179,8 @@ export async function startOfferCheckoutAction(formData: FormData) {
     .eq("id", offerId)
     .maybeSingle<OfferCheckoutRow>();
 
-  const listing = offer?.listing?.[0];
+  const listingRow = offer?.listing;
+  const listing = Array.isArray(listingRow) ? listingRow[0] : listingRow ?? null;
   if (!offer || !listing) {
     redirect("/offers?error=offer_not_found");
   }
@@ -225,6 +232,14 @@ export async function startOfferCheckoutAction(formData: FormData) {
 
   const transactionId = lockRow.transaction_id;
 
+  const buyerEmail = (user.email ?? "").trim();
+  if (!buyerEmail) {
+    await supabase.rpc("cancel_pending_transaction_and_unlock_listing", {
+      p_transaction_id: transactionId,
+    });
+    redirect("/offers?error=email_required");
+  }
+
   try {
     const session = await createStripeCheckoutSession({
       title: listing.title,
@@ -239,7 +254,7 @@ export async function startOfferCheckoutAction(formData: FormData) {
         offer_id: offer.id,
       },
       buyerId: user.id,
-      buyerEmail: user.email ?? "",
+      buyerEmail,
       feeAmount,
       shippingCost,
     });
@@ -265,14 +280,35 @@ export async function startOfferCheckoutAction(formData: FormData) {
     });
 
     redirect(session.url);
-  } catch {
+  } catch (err) {
+    // Next.js redirect() throws a special error; rethrow so the redirect to Stripe actually happens
+    const isRedirect =
+      typeof err === "object" &&
+      err !== null &&
+      "digest" in err &&
+      typeof (err as { digest?: string }).digest === "string" &&
+      (err as { digest: string }).digest.startsWith("NEXT_REDIRECT");
+    if (isRedirect) {
+      throw err;
+    }
     await supabase.rpc("cancel_pending_transaction_and_unlock_listing", {
       p_transaction_id: transactionId,
     });
+    const message = err instanceof Error ? err.message : String(err);
     logError({
       event: "offer_checkout_stripe_exception",
-      context: { offerId, transactionId, userId: user.id },
+      message,
+      context: {
+        offerId,
+        transactionId,
+        userId: user.id,
+        stack: err instanceof Error ? err.stack : undefined,
+      },
     });
-    redirect("/offers?error=stripe_session_exception");
+    const isDev = process.env.NODE_ENV === "development";
+    const errorUrl = isDev
+      ? `/offers?error=stripe_session_exception&error_detail=${encodeURIComponent(message)}`
+      : "/offers?error=stripe_session_exception";
+    redirect(errorUrl);
   }
 }

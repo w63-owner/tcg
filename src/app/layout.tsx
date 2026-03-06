@@ -4,6 +4,7 @@ import "./globals.css";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { AppShell } from "@/components/layout/app-shell";
 import { Toaster } from "@/components/ui/toaster";
+import { PublishedListingToast } from "@/components/marketplace/published-listing-toast";
 import { ServiceWorkerRegister } from "@/components/pwa/service-worker-register";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 
@@ -50,6 +51,7 @@ export default function RootLayout({
           <ServiceWorkerRegister />
           <InstallPrompt />
           <AppShell>{children}</AppShell>
+          <PublishedListingToast />
           <Toaster />
         </QueryProvider>
       </body>

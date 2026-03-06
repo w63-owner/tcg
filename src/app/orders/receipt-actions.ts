@@ -137,6 +137,39 @@ export async function confirmReceiptAction(
     context: { transactionId, sellerId: tx.seller_id },
   });
 
+  // Insert system message in conversation: sale completed (buyer) / balance credited (seller)
+  try {
+    const { data: conversationId, error: rpcError } = await admin.rpc(
+      "ensure_conversation_for_users",
+      {
+        p_listing_id: tx.listing_id,
+        p_buyer_id: tx.buyer_id,
+        p_seller_id: tx.seller_id,
+      },
+    );
+    if (!rpcError && conversationId) {
+      const saleCompletedContent = JSON.stringify({
+        type: "sale_completed",
+        seller_credit: sellerCredit,
+      });
+      await admin.from("messages").insert({
+        conversation_id: conversationId,
+        sender_id: tx.buyer_id,
+        message_type: "system",
+        content: saleCompletedContent,
+      });
+      revalidatePath("/messages");
+      revalidatePath(`/messages/${conversationId}`);
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    logError({
+      event: "receipt_confirm_sale_completed_message_failed",
+      message,
+      context: { transactionId },
+    });
+  }
+
   revalidatePath("/messages");
   revalidatePath("/profile/sales");
   return { ok: true };

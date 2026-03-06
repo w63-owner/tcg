@@ -25,7 +25,7 @@ export function AuthForm({ nextPath }: AuthFormProps) {
         </p>
       </div>
       <Tabs defaultValue="signin" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList variant="line" className="grid w-full grid-cols-2">
           <TabsTrigger value="signin">Connexion</TabsTrigger>
           <TabsTrigger value="signup">Inscription</TabsTrigger>
         </TabsList>

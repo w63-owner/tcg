@@ -11,6 +11,8 @@ export type OrderSuccessData = {
   createdAt: string;
   /** When "pending", the webhook may not have run yet; show a processing state. */
   paymentStatus: "paid" | "pending";
+  /** Conversation id for this sale (buyer–seller); used for "Voir la conversation" link. */
+  conversationId: string | null;
 };
 
 /**
@@ -29,7 +31,7 @@ export async function getOrderSuccessData(
   const { data: row, error } = await supabase
     .from("transactions")
     .select(
-      "id, total_amount, created_at, buyer_id, stripe_checkout_session_id, status, listing_title, listing:listings(title)",
+      "id, total_amount, created_at, buyer_id, seller_id, listing_id, stripe_checkout_session_id, status, listing_title, listing:listings(title)",
     )
     .eq("id", transactionId)
     .in("status", ["PAID", "PENDING_PAYMENT"])
@@ -38,6 +40,8 @@ export async function getOrderSuccessData(
       total_amount: number;
       created_at: string;
       buyer_id: string;
+      seller_id: string;
+      listing_id: string;
       stripe_checkout_session_id: string | null;
       status: string;
       listing_title: string | null;
@@ -78,6 +82,18 @@ export async function getOrderSuccessData(
 
   const totalAmount = Number(row.total_amount);
 
+  let conversationId: string | null = null;
+  try {
+    const { data: convId } = await supabase.rpc("ensure_conversation_for_users", {
+      p_listing_id: row.listing_id,
+      p_buyer_id: row.buyer_id,
+      p_seller_id: row.seller_id,
+    });
+    if (typeof convId === "string") conversationId = convId;
+  } catch {
+    // ignore
+  }
+
   return {
     transactionId: row.id,
     cardName,
@@ -86,5 +102,6 @@ export async function getOrderSuccessData(
     shippingAddress,
     createdAt: row.created_at,
     paymentStatus,
+    conversationId,
   };
 }

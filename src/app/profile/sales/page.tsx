@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { createClient } from "@/lib/supabase/server";
+import { formatTransactionStatusLabel } from "@/lib/listings/status-label";
 
 type TransactionStatus =
   | "PENDING_PAYMENT"
@@ -49,8 +50,8 @@ function StatusBadge({ status }: { status: TransactionStatus }) {
     );
   }
   return (
-    <Badge variant="outline" className="capitalize">
-      {status.replace("_", " ").toLowerCase()}
+    <Badge variant="outline">
+      {formatTransactionStatusLabel(status)}
     </Badge>
   );
 }

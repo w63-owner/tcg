@@ -12,7 +12,17 @@ type ProfileRow = {
   username: string;
   avatar_url: string | null;
   kyc_status: "UNVERIFIED" | "PENDING" | "REQUIRED" | "VERIFIED" | "REJECTED";
+  instagram_url: string | null;
+  facebook_url: string | null;
+  tiktok_url: string | null;
+  bio: string | null;
 };
+
+function defaultUsernameFromEmail(email: string | undefined): string {
+  const base = (email ?? "").split("@")[0].replace(/[^a-zA-Z0-9_-]/g, "") || "trainer";
+  const name = base.length >= 3 ? base.slice(0, 30) : "trainer";
+  return name;
+}
 
 export default async function ProfileDetailsPage() {
   const supabase = await createClient();
@@ -21,11 +31,42 @@ export default async function ProfileDetailsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/auth");
 
-  const { data: profile } = await supabase
+  let { data: profile } = await supabase
     .from("profiles")
-    .select("id, username, avatar_url, kyc_status")
+    .select("id, username, avatar_url, kyc_status, instagram_url, facebook_url, tiktok_url, bio")
     .eq("id", user.id)
     .maybeSingle<ProfileRow>();
+
+  if (!profile) {
+    const baseUsername = defaultUsernameFromEmail(user.email ?? undefined);
+    let inserted = false;
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const candidate = attempt === 0 ? baseUsername : `${baseUsername}_${attempt}`.slice(0, 30);
+      const { error: insertError } = await supabase.from("profiles").insert({
+        id: user.id,
+        username: candidate,
+        country_code: "FR",
+      });
+      if (!insertError) {
+        inserted = true;
+        break;
+      }
+      if (insertError.code === "23505") continue;
+      throw new Error(insertError.message);
+    }
+    if (inserted) {
+      await supabase.from("wallets").upsert(
+        { user_id: user.id, available_balance: 0, pending_balance: 0, currency: "EUR" },
+        { onConflict: "user_id", ignoreDuplicates: true }
+      );
+      const { data: newProfile } = await supabase
+        .from("profiles")
+        .select("id, username, avatar_url, kyc_status, instagram_url, facebook_url, tiktok_url, bio")
+        .eq("id", user.id)
+        .single<ProfileRow>();
+      profile = newProfile ?? null;
+    }
+  }
 
   const isVerified = profile?.kyc_status === "VERIFIED";
   const initial = (profile?.username || user.email || "U").slice(0, 1).toUpperCase();
@@ -69,6 +110,10 @@ export default async function ProfileDetailsPage() {
             initialPhone={user.phone ?? ""}
             email={user.email ?? "--"}
             username={profile?.username ?? "--"}
+            initialBio={profile?.bio ?? ""}
+            initialInstagramUrl={profile?.instagram_url ?? ""}
+            initialFacebookUrl={profile?.facebook_url ?? ""}
+            initialTiktokUrl={profile?.tiktok_url ?? ""}
           />
         </div>
       </div>

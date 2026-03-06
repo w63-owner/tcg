@@ -21,15 +21,19 @@ export async function markAsShippedAction(
   }
 
   const trackingNumber = String(formData.get("tracking_number") ?? "").trim();
-  const trackingUrl = String(formData.get("tracking_url") ?? "").trim();
+  let trackingUrl = String(formData.get("tracking_url") ?? "").trim();
+  if (trackingUrl && !/^https?:\/\//i.test(trackingUrl)) {
+    trackingUrl = `https://${trackingUrl}`;
+  }
 
   const { data: tx, error: fetchError } = await supabase
     .from("transactions")
-    .select("id, seller_id, buyer_id, status, listing:listings(title)")
+    .select("id, listing_id, seller_id, buyer_id, status, listing:listings(title)")
     .eq("id", transactionId)
     .eq("seller_id", user.id)
     .maybeSingle<{
       id: string;
+      listing_id: string;
       seller_id: string;
       buyer_id: string;
       status: string;
@@ -97,6 +101,37 @@ export async function markAsShippedAction(
       context: { transactionId },
     });
     // Don't fail the action: shipping was recorded
+  }
+
+  // Insert system message in conversation so buyer sees "order shipped" in the thread
+  try {
+    const admin = createAdminClient();
+    const { data: conversationId, error: rpcError } = await admin.rpc(
+      "ensure_conversation_for_users",
+      {
+        p_listing_id: tx.listing_id,
+        p_buyer_id: tx.buyer_id,
+        p_seller_id: tx.seller_id,
+      },
+    );
+    if (!rpcError && conversationId) {
+      const orderShippedContent = JSON.stringify({ type: "order_shipped" });
+      await admin.from("messages").insert({
+        conversation_id: conversationId,
+        sender_id: tx.seller_id,
+        message_type: "system",
+        content: orderShippedContent,
+      });
+      revalidatePath("/messages");
+      revalidatePath(`/messages/${conversationId}`);
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    logError({
+      event: "order_shipped_message_insert_failed",
+      message,
+      context: { transactionId },
+    });
   }
 
   revalidatePath("/profile/sales");

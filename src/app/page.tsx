@@ -64,6 +64,7 @@ export default async function Home({ searchParams }: HomeProps) {
       filters,
       page: 1,
       pageSize,
+      excludeSellerId: user?.id,
     }),
   ]);
 

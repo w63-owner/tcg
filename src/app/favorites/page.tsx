@@ -2,10 +2,11 @@ import Link from "next/link";
 import Image from "next/image";
 import { Heart } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { requireAuthenticatedUser } from "@/lib/auth/require-authenticated-user";
 import { fetchCardRefIdsByQuery } from "@/lib/listings/feed";
+import { formatListingStatusLabel } from "@/lib/listings/status-label";
 import { removeFavoriteListing, removeFavoriteSeller } from "./actions";
 import { SavedSearchesRealtimeListener } from "./saved-searches-realtime-listener";
 import { SavedSearchItem } from "./saved-search-item";
@@ -261,7 +262,7 @@ export default async function FavoritesPage() {
       </header>
 
       <Tabs defaultValue="listings">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList variant="line" className="grid w-full grid-cols-3">
           <TabsTrigger value="listings">Annonces</TabsTrigger>
           <TabsTrigger value="searches">Recherches</TabsTrigger>
           <TabsTrigger value="sellers">Vendeurs</TabsTrigger>
@@ -310,7 +311,7 @@ export default async function FavoritesPage() {
                             </p>
                             <p className="text-muted-foreground text-xs">
                               {listing?.display_price?.toFixed(2) ?? "--.--"} € ·{" "}
-                              {listing?.status ?? "UNKNOWN"}
+                              {formatListingStatusLabel(listing?.status)}
                             </p>
                           </div>
                         </Link>
@@ -365,7 +366,7 @@ export default async function FavoritesPage() {
         </TabsContent>
 
         <TabsContent value="sellers">
-          <Card>
+          <div className="flex flex-col gap-6">
             <CardHeader>
               <CardTitle>Vendeurs favoris</CardTitle>
             </CardHeader>
@@ -403,7 +404,7 @@ export default async function FavoritesPage() {
                 ))
               )}
             </CardContent>
-          </Card>
+          </div>
         </TabsContent>
       </Tabs>
     </section>

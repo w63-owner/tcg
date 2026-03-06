@@ -13,20 +13,29 @@ export function AcceptOfferForm({ offerId }: AcceptOfferFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
+  const submit = (formData: FormData) => {
+    startTransition(async () => {
+      await respondToOfferAction(formData);
+      router.refresh();
+    });
+  };
+
   return (
-    <form
-      action={(formData) => {
-        startTransition(async () => {
-          await respondToOfferAction(formData);
-          router.refresh();
-        });
-      }}
-    >
-      <input type="hidden" name="offer_id" value={offerId} />
-      <input type="hidden" name="decision" value="ACCEPTED" />
-      <Button type="submit" size="sm" disabled={isPending}>
-        {isPending ? "En cours..." : "Accepter"}
-      </Button>
-    </form>
+    <div className="flex flex-wrap gap-2">
+      <form action={submit}>
+        <input type="hidden" name="offer_id" value={offerId} />
+        <input type="hidden" name="decision" value="ACCEPTED" />
+        <Button type="submit" size="sm" variant="default" disabled={isPending}>
+          {isPending ? "En cours..." : "Accepter"}
+        </Button>
+      </form>
+      <form action={submit}>
+        <input type="hidden" name="offer_id" value={offerId} />
+        <input type="hidden" name="decision" value="REJECTED" />
+        <Button type="submit" size="sm" variant="outline" disabled={isPending}>
+          Décliner
+        </Button>
+      </form>
+    </div>
   );
 }

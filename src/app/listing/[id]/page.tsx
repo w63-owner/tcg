@@ -1,6 +1,7 @@
 import Link from "next/link";
+import Image from "next/image";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ChevronRight, Clock, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
 import { ListingImageCarousel } from "@/components/listing/listing-image-carousel";
@@ -191,43 +192,54 @@ export default async function ListingPage({
 
   let favoriteCount = 0;
   let initialFavorite = false;
-  const [favoriteCountResult, likedResult, cardRefResult, historyResult] = await Promise.all([
-    supabase.rpc("get_favorite_listing_counts", {
-      listing_ids: [listing.id],
-    }),
-    user
-      ? supabase
-          .from("favorite_listings")
-          .select("listing_id")
-          .eq("listing_id", listing.id)
-          .eq("user_id", user.id)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
-    listing.card_ref_id
-      ? supabase
-          .from("tcgdex_cards")
-          .select(
-            "card_key,id,name,set_id,set_name,set_card_count_official,set_serie_name,local_id,language,rarity,suffix,regulation_mark,illustrator",
-          )
-          .eq("card_key", listing.card_ref_id)
-          .maybeSingle<CardRefDetailsRow>()
-      : Promise.resolve({ data: null }),
-    listing.card_ref_id
-      ? supabase
-          .from("listings")
-          .select("created_at, display_price, price_seller")
-          .eq("card_ref_id", listing.card_ref_id)
-          .eq("status", "ACTIVE")
-          .order("created_at", { ascending: true })
-          .limit(240)
-      : Promise.resolve({ data: [] as Array<{ created_at: string; display_price: number | null; price_seller: number }> }),
-  ]);
+  const [favoriteCountResult, likedResult, cardRefResult, historyResult, sellerDisplayResult] =
+    await Promise.all([
+      supabase.rpc("get_favorite_listing_counts", {
+        listing_ids: [listing.id],
+      }),
+      user
+        ? supabase
+            .from("favorite_listings")
+            .select("listing_id")
+            .eq("listing_id", listing.id)
+            .eq("user_id", user.id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+      listing.card_ref_id
+        ? supabase
+            .from("tcgdex_cards")
+            .select(
+              "card_key,id,name,set_id,set_name,set_card_count_official,set_serie_name,local_id,language,rarity,suffix,regulation_mark,illustrator",
+            )
+            .eq("card_key", listing.card_ref_id)
+            .maybeSingle<CardRefDetailsRow>()
+        : Promise.resolve({ data: null }),
+      listing.card_ref_id
+        ? supabase
+            .from("listings")
+            .select("created_at, display_price, price_seller")
+            .eq("card_ref_id", listing.card_ref_id)
+            .eq("status", "ACTIVE")
+            .order("created_at", { ascending: true })
+            .limit(240)
+        : Promise.resolve({ data: [] as Array<{ created_at: string; display_price: number | null; price_seller: number }> }),
+      supabase.rpc("get_listing_seller_display", { p_listing_id: listing.id }),
+    ]);
 
   const favoriteCountRow = (favoriteCountResult.data ??
     []) as Array<{ listing_id: string; favorite_count: number }>;
   favoriteCount = Number(favoriteCountRow[0]?.favorite_count ?? 0);
   initialFavorite = Boolean(likedResult.data);
   const cardRef = (cardRefResult.data as CardRefDetailsRow | null) ?? null;
+  type SellerDisplayRow = {
+    id: string;
+    username: string;
+    avatar_url: string | null;
+    review_count: number;
+    rating_avg: number;
+    updated_at: string;
+  };
+  const sellerDisplay = (sellerDisplayResult.data as SellerDisplayRow[] | null)?.[0] ?? null;
 
   let priceHistory: Array<{ date: string; price: number }> = (historyResult.data ?? [])
     .map((row) => ({
@@ -253,8 +265,10 @@ export default async function ListingPage({
   const showMobileStickySellerActions = isSeller && ["ACTIVE", "DRAFT"].includes(listing.status);
   const isEditMode = query.edit === "1" && isSeller;
 
+  const showSoldBanner = listing.status === "SOLD";
+
   return (
-    <div className="space-y-4">
+    <div className={`space-y-4 ${showSoldBanner ? "pb-14" : ""}`}>
       <ListingErrorToast errorCode={query.error} />
       <section className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-3 lg:col-span-2">
@@ -342,6 +356,55 @@ export default async function ListingPage({
             ) : null}
             <p className="text-muted-foreground text-xs">Publiee {formatPostedSince(listing.created_at)}</p>
           </section>
+
+          {sellerDisplay ? (
+            <section className="space-y-3 border-b pb-4">
+              <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+                Auteur de l&apos;annonce
+              </p>
+              <Link
+                href={`/u/${encodeURIComponent(sellerDisplay.username)}`}
+                className="flex items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50"
+              >
+                <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full border bg-muted">
+                  {sellerDisplay.avatar_url ? (
+                    <Image
+                      src={sellerDisplay.avatar_url}
+                      alt=""
+                      fill
+                      sizes="48px"
+                      className="object-cover"
+                    />
+                  ) : (
+                    <span className="flex h-full items-center justify-center text-lg font-medium text-muted-foreground">
+                      {(sellerDisplay.username || "U").slice(0, 1).toUpperCase()}
+                    </span>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium truncate">{sellerDisplay.username}</p>
+                  <div className="mt-1 flex items-center gap-2 text-muted-foreground">
+                    <span className="inline-flex gap-0.5 text-amber-500" aria-label={`${Number(sellerDisplay.rating_avg)} sur 5`}>
+                      {[1, 2, 3, 4, 5].map((i) => (
+                        <Star
+                          key={i}
+                          className={`size-4 shrink-0 ${i <= Math.round(Number(sellerDisplay.rating_avg)) ? "fill-amber-500" : "fill-transparent"}`}
+                        />
+                      ))}
+                    </span>
+                    <span className="text-xs">
+                      {Number(sellerDisplay.review_count)} avis
+                    </span>
+                  </div>
+                  <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Clock className="size-3.5 shrink-0" />
+                    <span>Vu la derniere fois : {formatPostedSince(sellerDisplay.updated_at)}</span>
+                  </div>
+                </div>
+                <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
+              </Link>
+            </section>
+          ) : null}
 
           <section className="space-y-2 border-b pb-4">
             <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
@@ -501,6 +564,14 @@ export default async function ListingPage({
             </Button>
             <DeleteListingButton listingId={listing.id} />
           </div>
+        </div>
+      ) : null}
+
+      {showSoldBanner ? (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-amber-200 bg-amber-50/95 px-4 py-3 pb-[max(0.75rem,var(--safe-area-bottom))] backdrop-blur dark:border-amber-800 dark:bg-amber-950/95">
+          <p className="text-center text-sm font-semibold text-amber-800 dark:text-amber-200">
+            Vendu
+          </p>
         </div>
       ) : null}
     </div>
