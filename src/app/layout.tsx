@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { Suspense } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { QueryProvider } from "@/components/providers/query-provider";
@@ -51,7 +52,9 @@ export default function RootLayout({
           <ServiceWorkerRegister />
           <InstallPrompt />
           <AppShell>{children}</AppShell>
-          <PublishedListingToast />
+          <Suspense fallback={null}>
+            <PublishedListingToast />
+          </Suspense>
           <Toaster />
         </QueryProvider>
       </body>
