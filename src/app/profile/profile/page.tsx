@@ -1,10 +1,10 @@
 import Link from "next/link";
-import Image from "next/image";
 import { redirect } from "next/navigation";
 import { ArrowLeft, CheckCircle2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
+import { ProfileAvatarUpload } from "./profile-avatar-upload";
 import { ProfileDetailsFormClient } from "./profile-details-form-client";
 
 type ProfileRow = {
@@ -83,15 +83,7 @@ export default async function ProfileDetailsPage() {
       </div>
       <div>
         <div className="flex flex-col items-center py-3 text-center">
-          <div className="bg-muted relative h-16 w-16 shrink-0 overflow-hidden rounded-full border">
-            {profile?.avatar_url ? (
-              <Image src={profile.avatar_url} alt="Avatar profil" fill sizes="64px" className="object-cover" />
-            ) : (
-              <div className="text-muted-foreground flex h-full items-center justify-center text-lg font-semibold">
-                {initial}
-              </div>
-            )}
-          </div>
+          <ProfileAvatarUpload avatarUrl={profile?.avatar_url ?? null} initial={initial} />
           <div className="mt-2 space-y-1">
             <p className="text-sm font-medium">{profile?.username ?? "Mon profil"}</p>
             {isVerified ? (
