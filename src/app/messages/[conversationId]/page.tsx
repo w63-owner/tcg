@@ -13,6 +13,9 @@ import { BuyReservedForm } from "./buy-reserved-form";
 import { TrackingCard } from "./receipt-action-client";
 import { ShippingModalTrigger } from "@/app/profile/sales/shipping-modal-client";
 
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
+
 type ConversationRow = {
   id: string;
   listing_id: string;

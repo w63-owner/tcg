@@ -193,15 +193,20 @@ export async function createCheckoutSession(
       p_transaction_id: transactionId,
     });
 
-    const message = error instanceof Error ? error.message : "unknown";
+    const err = error as { message?: string; code?: string; type?: string };
+    const message =
+      error instanceof Error
+        ? error.message
+        : typeof err?.message === "string"
+          ? err.message
+          : String(error ?? "unknown");
     const stripeCode =
-      error && typeof error === "object" && "code" in error
-        ? String((error as { code?: string }).code)
-        : undefined;
+      typeof err?.code === "string" ? err.code : undefined;
     const stripeType =
-      error && typeof error === "object" && "type" in error
-        ? String((error as { type?: string }).type)
-        : undefined;
+      typeof err?.type === "string" ? err.type : undefined;
+    const fullErrorForLog =
+      error instanceof Error ? error.stack ?? error.message : String(error);
+
     logError({
       event: "checkout_stripe_exception",
       message,
@@ -211,6 +216,7 @@ export async function createCheckoutSession(
         userId: user.id,
         stripeCode,
         stripeType,
+        fullError: fullErrorForLog,
       },
     });
 
