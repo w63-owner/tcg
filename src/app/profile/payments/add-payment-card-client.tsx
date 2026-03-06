@@ -32,7 +32,8 @@ function AddCardForm({ onSuccess }: { onSuccess: () => void }) {
         setLoading(false);
         return;
       }
-      if ("setupIntent" in result && result.setupIntent?.status === "succeeded") {
+      const intent = (result as { setupIntent?: { status?: string } }).setupIntent;
+      if (intent?.status === "succeeded") {
         onSuccess();
       }
       // If status is requires_action, Stripe redirects to return_url; user comes back to profile/payments?added=1
