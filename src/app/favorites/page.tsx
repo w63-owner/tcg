@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { requireAuthenticatedUser } from "@/lib/auth/require-authenticated-user";
-import { fetchCardRefIdsByQuery } from "@/lib/listings/feed";
 import { formatListingStatusLabel } from "@/lib/listings/status-label";
 import { removeFavoriteListing, removeFavoriteSeller } from "./actions";
 import { SavedSearchesRealtimeListener } from "./saved-searches-realtime-listener";
@@ -163,6 +162,22 @@ function describeSavedSearchCriteria(params: Record<string, string>) {
   return criteria;
 }
 
+async function getCardRefIdsBySearchQuery(
+  supabase: Awaited<ReturnType<typeof requireAuthenticatedUser>>["supabase"],
+  query: string,
+): Promise<string[]> {
+  const term = query.trim();
+  if (!term) return [];
+  const { data } = await supabase
+    .from("tcgdex_cards")
+    .select("card_key")
+    .or(
+      `name.ilike.%${term}%,set_id.ilike.%${term}%,set_name.ilike.%${term}%,id.ilike.%${term}%,local_id.ilike.%${term}%,language.ilike.%${term}%`,
+    )
+    .limit(2000);
+  return (data ?? []).map((row) => row.card_key as string);
+}
+
 async function countNewListingsForSavedSearch(
   supabase: Awaited<ReturnType<typeof requireAuthenticatedUser>>["supabase"],
   row: SavedSearchRow,
@@ -177,7 +192,7 @@ async function countNewListingsForSavedSearch(
   const gradeMax = parseOptionalNumber(params.grade_max);
   const priceMin = parseOptionalNumber(params.price_min);
   const priceMax = parseOptionalNumber(params.price_max);
-  const queryCardRefIds = query ? await fetchCardRefIdsByQuery(supabase, query) : [];
+  const queryCardRefIds = query ? await getCardRefIdsBySearchQuery(supabase, query) : [];
 
   let cardRefIds: string[] | null = null;
   if (setFilter || rarityFilter) {
