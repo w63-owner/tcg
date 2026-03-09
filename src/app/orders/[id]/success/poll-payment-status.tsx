@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { clearMarketplaceFeedCache } from "@/components/marketplace/infinite-listings-feed";
 import { checkOrderPaymentStatus } from "./check-order-payment-status";
 
 const POLL_INTERVAL_MS = 2000;
@@ -27,6 +28,7 @@ export function PollPaymentStatus({ transactionId }: Props) {
       const result = await checkOrderPaymentStatus(transactionId);
       if (result?.paymentStatus === "paid") {
         clearInterval(interval);
+        clearMarketplaceFeedCache();
         router.refresh();
       }
     }, POLL_INTERVAL_MS);

@@ -28,7 +28,7 @@ type ListingDetailsRow = {
   is_graded: boolean;
   grading_company: string | null;
   grade_note: number | null;
-  status: "DRAFT" | "ACTIVE" | "LOCKED" | "SOLD";
+  status: "DRAFT" | "ACTIVE" | "LOCKED" | "RESERVED" | "SOLD";
   cover_image_url: string | null;
   back_image_url: string | null;
   created_at: string;
@@ -265,10 +265,12 @@ export default async function ListingPage({
   const showMobileStickySellerActions = isSeller && ["ACTIVE", "DRAFT"].includes(listing.status);
   const isEditMode = query.edit === "1" && isSeller;
 
-  const showSoldBanner = listing.status === "SOLD";
+  const showUnavailableBanner = ["SOLD", "LOCKED", "RESERVED"].includes(
+    listing.status,
+  );
 
   return (
-    <div className={`space-y-4 ${showSoldBanner ? "pb-14" : ""}`}>
+    <div className={`space-y-4 ${showUnavailableBanner ? "pb-14" : ""}`}>
       <ListingErrorToast errorCode={query.error} />
       <section className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-3 lg:col-span-2">
@@ -567,10 +569,14 @@ export default async function ListingPage({
         </div>
       ) : null}
 
-      {showSoldBanner ? (
+      {showUnavailableBanner ? (
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-amber-200 bg-amber-50/95 px-4 py-3 pb-[max(0.75rem,var(--safe-area-bottom))] backdrop-blur dark:border-amber-800 dark:bg-amber-950/95">
           <p className="text-center text-sm font-semibold text-amber-800 dark:text-amber-200">
-            Vendu
+            {listing.status === "SOLD"
+              ? "Vendu"
+              : listing.status === "RESERVED"
+                ? "Réservé"
+                : "En cours d'achat"}
           </p>
         </div>
       ) : null}

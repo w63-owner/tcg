@@ -10,6 +10,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { getOrderSuccessData } from "./get-order-success-data";
+import { InvalidateFeedCacheOnMount } from "./invalidate-feed-cache-on-mount";
 import { PollPaymentStatus } from "./poll-payment-status";
 
 type PageProps = { params: Promise<{ id: string }> };
@@ -43,6 +44,7 @@ export default async function OrderSuccessPage({ params }: PageProps) {
           </>
         ) : (
           <>
+            <InvalidateFeedCacheOnMount />
             <div className="bg-primary/10 text-primary mb-4 flex h-16 w-16 items-center justify-center rounded-full">
               <CheckCircle2 className="h-10 w-10" aria-hidden />
             </div>

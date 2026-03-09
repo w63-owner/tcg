@@ -82,7 +82,10 @@ export function InfiniteListingsFeed({
         items?: ListingItem[];
         page?: number;
         hasNextPage?: boolean;
+        timestamp?: number;
       };
+      if (!parsed.timestamp || Date.now() - parsed.timestamp > 300000)
+        throw new Error("Cache expiré");
       if (!Array.isArray(parsed.items) || parsed.items.length === 0) {
         setItems(toListingItems(initialListings, initialFavoriteListingIds));
         setPage(1);
@@ -105,6 +108,7 @@ export function InfiniteListingsFeed({
       items,
       page,
       hasNextPage,
+      timestamp: Date.now(),
     });
     window.sessionStorage.setItem(cacheKey, payload);
   }, [cacheKey, hasNextPage, items, page]);
@@ -206,4 +210,14 @@ export function InfiniteListingsFeed({
       )}
     </div>
   );
+}
+
+export function clearMarketplaceFeedCache() {
+  if (typeof window === "undefined") return;
+  const keysToRemove: string[] = [];
+  for (let i = 0; i < sessionStorage.length; i++) {
+    const key = sessionStorage.key(i);
+    if (key?.startsWith("marketplace-feed:")) keysToRemove.push(key);
+  }
+  keysToRemove.forEach((k) => sessionStorage.removeItem(k));
 }
