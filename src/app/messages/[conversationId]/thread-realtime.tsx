@@ -1,39 +1,31 @@
 "use client";
 
-import { useEffect, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
+import {
+  useMessagesConversation,
+  normalizeRealtimeMessage,
+} from "./messages-conversation-state";
+import { markConversationReadSilentAction } from "@/app/messages/actions";
 
 const REALTIME_SUBSCRIBE_DELAY_MS = 400;
 
 type ThreadRealtimeProps = {
   conversationId: string;
+  currentUserId: string;
 };
 
-export function ThreadRealtime({ conversationId }: ThreadRealtimeProps) {
-  const router = useRouter();
-  const [, startTransition] = useTransition();
+export function ThreadRealtime({
+  conversationId,
+  currentUserId,
+}: ThreadRealtimeProps) {
+  const { addMessage } = useMessagesConversation();
+  const addMessageRef = useRef(addMessage);
+  addMessageRef.current = addMessage;
 
   useEffect(() => {
-    // 1. Force le refresh au montage (avec startTransition pour que Next.js ne l'ignore pas pendant la navigation)
-    const initialRefresh = setTimeout(() => {
-      startTransition(() => {
-        router.refresh();
-      });
-    }, 50);
-
-    // 2. Force le refresh quand le navigateur sort de l'arrière-plan (très courant sur mobile)
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        startTransition(() => {
-          router.refresh();
-        });
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    // 3. Écoute des événements temps réel Supabase
-    let channel: ReturnType<ReturnType<typeof createClient>["channel"]> | null = null;
+    let channel: ReturnType<ReturnType<typeof createClient>["channel"]> | null =
+      null;
     const timeoutId = window.setTimeout(() => {
       const supabase = createClient();
       channel = supabase
@@ -41,30 +33,35 @@ export function ThreadRealtime({ conversationId }: ThreadRealtimeProps) {
         .on(
           "postgres_changes",
           {
-            event: "*",
+            event: "INSERT",
             schema: "public",
             table: "messages",
             filter: `conversation_id=eq.${conversationId}`,
           },
-          () => {
-            startTransition(() => {
-              router.refresh();
-            });
+          (payload) => {
+            const raw = payload.new as Record<string, unknown>;
+            if (raw && typeof raw === "object") {
+              const msg = normalizeRealtimeMessage(raw);
+              addMessageRef.current(msg);
+              if (msg.sender_id !== currentUserId) {
+                const formData = new FormData();
+                formData.set("conversation_id", conversationId);
+                void markConversationReadSilentAction(formData);
+              }
+            }
           },
         )
         .subscribe();
     }, REALTIME_SUBSCRIBE_DELAY_MS);
 
     return () => {
-      clearTimeout(initialRefresh);
-      clearTimeout(timeoutId);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.clearTimeout(timeoutId);
       if (channel) {
         const supabase = createClient();
         void supabase.removeChannel(channel);
       }
     };
-  }, [conversationId, router]);
+  }, [conversationId, currentUserId]);
 
   return null;
 }

@@ -158,6 +158,28 @@ export async function markConversationReadAction(formData: FormData) {
   });
 }
 
+/**
+ * Marque les messages non lus de la conversation comme lus, sans revalidatePath.
+ * À utiliser depuis le Realtime (WebSockets) pour ne pas déclencher de re-render serveur.
+ */
+export async function markConversationReadSilentAction(formData: FormData) {
+  const conversationId = String(formData.get("conversation_id") ?? "").trim();
+  if (!conversationId) return;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+
+  await supabase
+    .from("messages")
+    .update({ read_at: new Date().toISOString() })
+    .eq("conversation_id", conversationId)
+    .is("read_at", null)
+    .neq("sender_id", user.id);
+}
+
 export type SubmitOfferFromConversationResult = {
   ok: boolean;
   error?: string;

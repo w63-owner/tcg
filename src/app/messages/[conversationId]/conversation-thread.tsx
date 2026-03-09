@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { Banknote, CheckCircle2, Package, Handshake, XCircle } from "lucide-react";
 import { AcceptOfferForm } from "./accept-offer-form";
+import { useMessagesConversation } from "./messages-conversation-state";
 
 type OfferData = {
   id: string;
@@ -265,13 +266,34 @@ export function ConversationThread({
                       </div>
                     ) : null}
                   </div>
-                ) : (
+                ) : message.message_type === "offer" ? (
                   <div
                     className={`max-w-[85%] rounded-lg border px-3 py-2.5 text-sm ${
                       isMine ? "bg-primary/10" : "bg-muted/40"
                     }`}
                   >
+                    <p className="text-muted-foreground italic text-sm">
+                      {message.content?.trim()
+                        ? message.content
+                        : "Nouvelle offre reçue"}
+                    </p>
+                  </div>
+                ) : (
+                  <div
+                    className={`max-w-[85%] rounded-lg border px-3 py-2.5 text-sm ${
+                      message.message_type === "optimistic_failed"
+                        ? "border-destructive/50 bg-destructive/10"
+                        : isMine
+                          ? "bg-primary/10"
+                          : "bg-muted/40"
+                    }`}
+                  >
                     <p>{message.content}</p>
+                    {message.message_type === "optimistic_failed" && (
+                      <p className="text-destructive mt-1 text-xs">
+                        Échec de l&apos;envoi. Réessaie.
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
@@ -309,5 +331,28 @@ export function ConversationThread({
       })}
       <div ref={bottomRef} />
     </div>
+  );
+}
+
+type ConversationThreadConnectedProps = {
+  currentUserId: string;
+  sellerId: string;
+  buyerUsername?: string | null;
+};
+
+/** Version connectée au contexte : lit les messages depuis l’état client. */
+export function ConversationThreadConnected({
+  currentUserId,
+  sellerId,
+  buyerUsername = null,
+}: ConversationThreadConnectedProps) {
+  const { messages } = useMessagesConversation();
+  return (
+    <ConversationThread
+      messages={messages}
+      currentUserId={currentUserId}
+      sellerId={sellerId}
+      buyerUsername={buyerUsername}
+    />
   );
 }

@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { requireAuthenticatedUser } from "@/lib/auth/require-authenticated-user";
 import { ThreadRealtime } from "./thread-realtime";
 import { ConversationLiveControls } from "./conversation-live-controls";
-import { ConversationThread } from "./conversation-thread";
+import { ConversationThreadConnected } from "./conversation-thread";
+import { MessagesConversationProvider } from "./messages-conversation-state";
 import { OfferModal } from "./offer-modal";
 import { AcceptOfferForm } from "./accept-offer-form";
 import { BuyReservedForm } from "./buy-reserved-form";
@@ -225,9 +226,15 @@ export default async function MessagesThreadPage({
     <section
       className={`flex min-h-[calc(100dvh-8rem)] flex-col gap-3 md:pb-0 ${bottomPadding}`}
     >
-      <ThreadRealtime conversationId={conversation.id} />
+      <MessagesConversationProvider
+        key={conversation.id}
+        initialMessages={rows}
+        conversationId={conversation.id}
+        currentUserId={user.id}
+      >
+        <ThreadRealtime conversationId={conversation.id} currentUserId={user.id} />
 
-      <header className="relative flex items-center justify-center">
+        <header className="relative flex items-center justify-center">
         <Button asChild variant="ghost" size="icon" className="absolute left-0 h-9 w-9">
           <Link href="/messages" aria-label="Retour aux conversations">
             <ArrowLeft className="h-4 w-4" />
@@ -280,8 +287,7 @@ export default async function MessagesThreadPage({
 
       <div className="flex-1 overflow-hidden">
         <div className="h-full pt-3">
-          <ConversationThread
-            messages={rows}
+          <ConversationThreadConnected
             currentUserId={user.id}
             sellerId={conversation.seller_id}
             buyerUsername={pickOne(conversation.buyer)?.username ?? null}
@@ -329,6 +335,7 @@ export default async function MessagesThreadPage({
           />
         </div>
       </div>
+      </MessagesConversationProvider>
     </section>
   );
 }
