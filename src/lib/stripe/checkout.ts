@@ -41,6 +41,9 @@ export async function createStripeCheckoutSession(params: StripeCheckoutParams) 
 
   const customerId = await getOrCreateStripeCustomerId(buyerId, buyerEmail);
 
+  // Align session expiry with DB lock (30 min); Stripe minimum is 30 min
+  const expiresAt = Math.floor(Date.now() / 1000) + 30 * 60;
+
   const sessionMetadata: Record<string, string> = {
     ...metadata,
     transaction_id: transactionId,
@@ -74,5 +77,6 @@ export async function createStripeCheckoutSession(params: StripeCheckoutParams) 
     success_url: `${siteUrl}/orders/${transactionId}/success`,
     cancel_url: `${siteUrl}${cancelPath}`,
     metadata: sessionMetadata,
+    expires_at: expiresAt,
   });
 }

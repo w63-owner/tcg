@@ -229,6 +229,16 @@ export async function createCheckoutSession(
     if (stripeCode === "parameter_unknown" || message.includes("payment_intent_data")) {
       return { error: "Configuration Stripe incorrecte. Vérifie les paramètres du compte." };
     }
+    // Session expirée ou limite de temps dépassée (aligné avec expires_at 30 min)
+    if (
+      message.toLowerCase().includes("expired") ||
+      message.toLowerCase().includes("expires") ||
+      message.toLowerCase().includes("time")
+    ) {
+      return {
+        error: "Le délai de réservation a expiré. Recharge la page pour réserver à nouveau.",
+      };
+    }
 
     // En développement, afficher l'erreur réelle dans le toast pour faciliter le debug
     if (process.env.NODE_ENV === "development" && message !== "unknown") {

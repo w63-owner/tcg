@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useTransition, useEffect } from "react";
+import { useState, useTransition, useEffect, useRef } from "react";
 import Image from "next/image";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, Clock } from "lucide-react";
 
 const PROFILE_DETAILS_STORAGE_KEY = (userId: string) => `profile_details_${userId}`;
+const CHECKOUT_RESERVATION_SECONDS = 30 * 60; // 30 min, aligné avec le verrou DB et la session Stripe
 import {
   Card,
   CardContent,
@@ -43,6 +44,12 @@ function toEuro(amount: number) {
   }).format(amount);
 }
 
+function formatCountdown(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
 type CheckoutFormClientProps = {
   buyerId: string;
   listingId: string;
@@ -77,8 +84,33 @@ export function CheckoutFormClient({
   const [shippingCost, setShippingCost] = useState(initialShippingCost);
   const [isShippingLoading, setIsShippingLoading] = useState(false);
   const [isPayPending, startPayTransition] = useTransition();
+  const [secondsLeft, setSecondsLeft] = useState(CHECKOUT_RESERVATION_SECONDS);
+  const [reservationExpired, setReservationExpired] = useState(false);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const total = Math.round((displayPrice + shippingCost) * 100) / 100;
+
+  // Compte à rebours 30 min : à 0 on désactive le paiement et on affiche le message d’expiration
+  useEffect(() => {
+    setSecondsLeft(CHECKOUT_RESERVATION_SECONDS);
+    setReservationExpired(false);
+    intervalRef.current = setInterval(() => {
+      setSecondsLeft((prev) => {
+        if (prev <= 1) {
+          if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
+          }
+          setReservationExpired(true);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, []);
 
   // Pre-fill full address from profile (Profil → Profil → Adresse), same localStorage key
   useEffect(() => {
@@ -157,6 +189,31 @@ export function CheckoutFormClient({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      {reservationExpired ? (
+        <div className="rounded-lg border border-orange-200 bg-orange-50 p-4 text-orange-800 dark:border-orange-800 dark:bg-orange-950/40 dark:text-orange-200">
+          <p className="font-medium">Le délai de réservation est expiré.</p>
+          <p className="mt-1 text-sm opacity-90">
+            Cet article est de nouveau disponible pour les autres acheteurs. Recharge la page pour le réserver à nouveau.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-3 border-orange-300 text-orange-800 hover:bg-orange-100 dark:border-orange-700 dark:text-orange-200 dark:hover:bg-orange-900/50"
+            onClick={() => window.location.reload()}
+          >
+            Recharger la page
+          </Button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 text-orange-800 dark:border-orange-800 dark:bg-orange-950/40 dark:text-orange-200">
+          <Clock className="h-4 w-4 shrink-0" aria-hidden />
+          <p className="text-sm">
+            Cet article t'est réservé pendant <strong>{formatCountdown(secondsLeft)}</strong>. Au-delà, il sera de nouveau disponible pour les autres acheteurs.
+          </p>
+        </div>
+      )}
+
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Article</CardTitle>
@@ -282,7 +339,7 @@ export function CheckoutFormClient({
             type="submit"
             className="w-full"
             size="lg"
-            disabled={isPayPending || isShippingLoading}
+            disabled={isPayPending || isShippingLoading || reservationExpired}
           >
             {isPayPending ? (
               <>

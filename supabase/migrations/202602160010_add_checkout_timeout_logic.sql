@@ -1,11 +1,12 @@
 -- ============================================================
--- Checkout timeout: 1h default expiration + release expired locks
+-- Checkout timeout: 30 min default expiration + release expired locks
 -- Relies on idx_transactions_status_exp (status, expiration_date)
+-- Aligned with Stripe Checkout session expiry (min 30 min)
 -- ============================================================
 
--- 1) Réduire le délai d'expiration par défaut de 24h à 1h
+-- 1) Réduire le délai d'expiration par défaut à 30 min (aligné Stripe)
 alter table public.transactions
-  alter column expiration_date set default (now() + interval '1 hour');
+  alter column expiration_date set default (now() + interval '30 minutes');
 
 -- 2) Fonction de déblocage des transactions expirées (utilise idx_transactions_status_exp)
 create or replace function public.release_expired_locked_transactions()
