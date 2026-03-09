@@ -1568,25 +1568,40 @@ export function SellForm() {
         ? createPortal(
             <div className="fixed inset-0 z-[100] bg-black text-white">
               {capturedPreviewUrl ? (
-                <Image
-                  src={capturedPreviewUrl}
-                  alt={`Preview ${cameraSide === "front" ? "recto" : "verso"}`}
-                  fill
-                  unoptimized
-                  className="object-cover"
-                />
+                /* Affichage de la photo rognée */
+                <div className="absolute inset-0 flex items-center justify-center bg-black">
+                  <div className="relative w-[min(94vw,calc((100dvh-11rem)*63/88))] aspect-[63/88] overflow-hidden rounded-md border-2 border-white">
+                    <Image
+                      src={capturedPreviewUrl}
+                      alt={`Preview ${cameraSide === "front" ? "recto" : "verso"}`}
+                      fill
+                      unoptimized
+                      className="object-cover"
+                    />
+                  </div>
+                </div>
               ) : (
-                <video
-                  ref={videoRef}
-                  className="h-full w-full object-cover"
-                  autoPlay
-                  muted
-                  playsInline
-                />
+                /* Affichage de la caméra en direct avec le cadre/masque */
+                <>
+                  <video
+                    ref={videoRef}
+                    className="h-full w-full object-cover"
+                    autoPlay
+                    muted
+                    playsInline
+                  />
+                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                    <div className="relative w-[min(94vw,calc((100dvh-11rem)*63/88))] aspect-[63/88] rounded-md border-2 border-white/90 shadow-[0_0_0_9999px_rgba(0,0,0,0.5)]">
+                      {/* Petit texte indicatif au centre du cadre */}
+                      <div className="absolute inset-0 flex items-center justify-center text-center">
+                        <p className="rounded bg-black/50 px-3 py-1 text-sm font-medium text-white/80 backdrop-blur-sm">
+                          Placez la carte ici
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </>
               )}
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                <div className="w-[min(94vw,calc((100dvh-11rem)*63/88))] aspect-[63/88] rounded-md border-2 border-white/90 shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
-              </div>
 
               <div className="absolute inset-x-0 top-0 flex items-center justify-between bg-gradient-to-b from-black/70 to-transparent px-4 pt-6 pb-4">
                 <Button
