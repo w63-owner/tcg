@@ -41,11 +41,11 @@ BEGIN
     l.display_price,
     l.condition::text,
     l.is_graded,
-    l.grading_company,
+    l.grading_company::text,
     l.grade_note,
-    l.card_ref_id,
+    l.card_ref_id::text,
     l.created_at,
-    c.language,
+    c.language::text,
     (SELECT count(*)::bigint FROM public.favorite_listings fl WHERE fl.listing_id = l.id) AS favorite_count
   FROM public.listings l
   LEFT JOIN public.tcgdex_cards c ON c.card_key = l.card_ref_id

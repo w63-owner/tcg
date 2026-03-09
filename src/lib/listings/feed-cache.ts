@@ -25,7 +25,7 @@ const fetchPublicFeedCached = unstable_cache(
       pageSize,
     });
   },
-  ["public-feed-v1"],
+  ["public-feed-v2"],
   { revalidate: 20 },
 );
 
