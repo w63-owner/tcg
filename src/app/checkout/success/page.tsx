@@ -4,6 +4,7 @@ import { CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/server";
+import { InvalidateFeedCacheOnMount } from "@/app/orders/[id]/success/invalidate-feed-cache-on-mount";
 
 type SearchParams = { tx?: string; session_id?: string };
 
@@ -23,6 +24,7 @@ export default async function CheckoutSuccessPage({
 
   return (
     <section className="mx-auto max-w-md space-y-6 py-8">
+      <InvalidateFeedCacheOnMount />
       <Card>
         <CardHeader>
           <div className="flex items-center gap-2 text-green-600">

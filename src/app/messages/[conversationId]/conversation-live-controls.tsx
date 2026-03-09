@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Send } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { createClient } from "@/lib/supabase/client";
 import { useMessagesConversation } from "./messages-conversation-state";
 
@@ -27,12 +27,11 @@ export function ConversationLiveControls({
   counterpartName,
 }: ConversationLiveControlsProps) {
   const supabase = useMemo(() => createClient(), []);
-  const { addOptimisticMessage, removeOptimisticMessage } =
+  const { addOptimisticMessage, removeOptimisticMessage, setIsCounterpartTyping } =
     useMessagesConversation();
 
   const [content, setContent] = useState("");
   const [isSending, setIsSending] = useState(false);
-  const [isCounterpartTyping, setIsCounterpartTyping] = useState(false);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -131,18 +130,8 @@ export function ConversationLiveControls({
 
   return (
     <div className="flex flex-col gap-1.5">
-      {isCounterpartTyping ? (
-        <p className="text-muted-foreground flex items-center gap-1 text-xs italic">
-          <span>{counterpartName} est en train d&apos;écrire</span>
-          <span className="inline-flex gap-0.5">
-            <span className="animate-bounce [animation-delay:0ms]">.</span>
-            <span className="animate-bounce [animation-delay:150ms]">.</span>
-            <span className="animate-bounce [animation-delay:300ms]">.</span>
-          </span>
-        </p>
-      ) : null}
       <div className="flex items-center gap-2">
-        <Input
+        <Textarea
           value={content}
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={(event) => {
@@ -153,6 +142,8 @@ export function ConversationLiveControls({
           }}
           placeholder="Ecris ton message..."
           maxLength={2000}
+          rows={1}
+          className="min-h-[40px] max-h-[120px] resize-none overflow-y-auto rounded-xl py-2.5"
         />
         <Button
           type="button"

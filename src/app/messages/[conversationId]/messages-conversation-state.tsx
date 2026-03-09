@@ -39,6 +39,8 @@ type MessagesConversationContextValue = {
   removeOptimisticMessage: (tempId: string) => void;
   markOptimisticFailed: (tempId: string) => void;
   fetchOfferDetails: (offerId: string) => Promise<void>;
+  isCounterpartTyping: boolean;
+  setIsCounterpartTyping: (typing: boolean) => void;
 };
 
 const MessagesConversationContext =
@@ -112,6 +114,7 @@ export function MessagesConversationProvider({
   children,
 }: MessagesConversationProviderProps) {
   const [messages, setMessages] = useState<ThreadMessage[]>(initialMessages);
+  const [isCounterpartTyping, setIsCounterpartTyping] = useState(false);
   const lastOptimisticIdRef = useRef<string | null>(null);
 
   const addMessage = useCallback(
@@ -188,6 +191,8 @@ export function MessagesConversationProvider({
     removeOptimisticMessage,
     markOptimisticFailed,
     fetchOfferDetails,
+    isCounterpartTyping,
+    setIsCounterpartTyping,
   };
 
   return (
