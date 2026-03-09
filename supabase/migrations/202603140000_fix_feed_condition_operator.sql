@@ -1,4 +1,4 @@
--- Fonction RPC unifiée pour le feed (recherche textuelle via idx_listings_title_trgm existant)
+-- Fix: compare listings.condition (enum card_condition) with text by casting enum to text
 CREATE OR REPLACE FUNCTION public.search_listings_feed(
   p_q text DEFAULT NULL,
   p_set text DEFAULT NULL,
@@ -39,7 +39,7 @@ BEGIN
     l.cover_image_url,
     l.price_seller,
     l.display_price,
-    l.condition,
+    l.condition::text,
     l.is_graded,
     l.grading_company,
     l.grade_note,
@@ -79,6 +79,3 @@ BEGIN
   OFFSET p_offset;
 END;
 $$;
-
-GRANT EXECUTE ON FUNCTION public.search_listings_feed(text, text, text, text, boolean, numeric, numeric, numeric, numeric, text, integer, integer, uuid) TO anon;
-GRANT EXECUTE ON FUNCTION public.search_listings_feed(text, text, text, text, boolean, numeric, numeric, numeric, numeric, text, integer, integer, uuid) TO authenticated;
