@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -12,9 +12,27 @@ type ThreadRealtimeProps = {
 
 export function ThreadRealtime({ conversationId }: ThreadRealtimeProps) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
 
   useEffect(() => {
-    router.refresh();
+    // 1. Force le refresh au montage (avec startTransition pour que Next.js ne l'ignore pas pendant la navigation)
+    const initialRefresh = setTimeout(() => {
+      startTransition(() => {
+        router.refresh();
+      });
+    }, 50);
+
+    // 2. Force le refresh quand le navigateur sort de l'arrière-plan (très courant sur mobile)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        startTransition(() => {
+          router.refresh();
+        });
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // 3. Écoute des événements temps réel Supabase
     let channel: ReturnType<ReturnType<typeof createClient>["channel"]> | null = null;
     const timeoutId = window.setTimeout(() => {
       const supabase = createClient();
@@ -29,14 +47,18 @@ export function ThreadRealtime({ conversationId }: ThreadRealtimeProps) {
             filter: `conversation_id=eq.${conversationId}`,
           },
           () => {
-            router.refresh();
+            startTransition(() => {
+              router.refresh();
+            });
           },
         )
         .subscribe();
     }, REALTIME_SUBSCRIBE_DELAY_MS);
 
     return () => {
-      window.clearTimeout(timeoutId);
+      clearTimeout(initialRefresh);
+      clearTimeout(timeoutId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       if (channel) {
         const supabase = createClient();
         void supabase.removeChannel(channel);
