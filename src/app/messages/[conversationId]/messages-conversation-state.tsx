@@ -56,8 +56,9 @@ type MessagesConversationContextValue = {
   setIsCounterpartTyping: (typing: boolean) => void;
   headerVisible: boolean;
   setHeaderVisible: (visible: boolean) => void;
-  connectionStatus: "SUBSCRIBED" | "CLOSED" | "CHANNEL_ERROR" | "TIMED_OUT" | null;
+  connectionStatus: "connected" | "reconnecting" | "disconnected";
   setConnectionStatus: (status: MessagesConversationContextValue["connectionStatus"]) => void;
+  mergeMissedMessages: (newMessages: ThreadMessage[]) => void;
 };
 
 const MessagesConversationContext =
@@ -153,7 +154,7 @@ export function MessagesConversationProvider({
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [isCounterpartTyping, setIsCounterpartTyping] = useState(false);
   const [headerVisible, setHeaderVisible] = useState(true);
-  const [connectionStatus, setConnectionStatus] = useState<MessagesConversationContextValue["connectionStatus"]>(null);
+  const [connectionStatus, setConnectionStatus] = useState<MessagesConversationContextValue["connectionStatus"]>("connected");
   const lastOptimisticIdRef = useRef<string | null>(null);
   const retrySendRef = useRef<((content: string) => Promise<void>) | null>(null);
 
@@ -171,6 +172,21 @@ export function MessagesConversationProvider({
     });
   }, []);
 
+  /** Fusionne les messages manqués (catch-up) avec déduplication par id et tri chronologique. */
+  const mergeMissedMessages = useCallback((newMessages: ThreadMessage[]) => {
+    if (newMessages.length === 0) return;
+    setMessages((prev) => {
+      const existingIds = new Set(prev.map((m) => m.id));
+      const toAdd = newMessages.filter((m) => !existingIds.has(m.id));
+      if (toAdd.length === 0) return prev;
+      const merged = [...prev, ...toAdd];
+      merged.sort(
+        (a, b) =>
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+      );
+      return merged;
+    });
+  }, []);
 
   const addMessage = useCallback(
     (newMsg: ThreadMessage) => {
@@ -269,6 +285,7 @@ export function MessagesConversationProvider({
     setHeaderVisible,
     connectionStatus,
     setConnectionStatus,
+    mergeMissedMessages,
   };
 
   return (

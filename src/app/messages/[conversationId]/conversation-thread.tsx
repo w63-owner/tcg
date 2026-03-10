@@ -422,7 +422,7 @@ export function ConversationThread({
   }
 
   const showConnectionBanner =
-    connectionStatus != null && connectionStatus !== "SUBSCRIBED";
+    connectionStatus === "reconnecting" || connectionStatus === "disconnected";
 
   return (
     <div ref={viewportRef} className="flex h-full flex-col justify-end gap-3 overflow-y-auto">
@@ -430,7 +430,9 @@ export function ConversationThread({
       {showConnectionBanner ? (
         <div className="bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-200 flex items-center justify-center gap-2 px-3 py-2 text-xs">
           <span className="size-2 animate-pulse rounded-full bg-amber-500" aria-hidden />
-          Reconnexion en cours...
+          {connectionStatus === "reconnecting"
+            ? "Connexion en cours..."
+            : "En attente du réseau..."}
         </div>
       ) : null}
       {isLoadingOlder ? (

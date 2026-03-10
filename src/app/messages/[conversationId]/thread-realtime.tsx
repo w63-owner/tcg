@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
   useMessagesConversation,
   normalizeRealtimeMessage,
   type ThreadMessage,
 } from "./messages-conversation-state";
-import { fetchMessagesAfter } from "@/app/messages/actions";
+import { fetchMessagesSince } from "@/app/messages/actions";
 import type { FetchOlderMessagesRow } from "@/app/messages/actions";
 
 type ThreadRealtimeProps = {
@@ -38,37 +38,21 @@ export function ThreadRealtime({
   const {
     addMessage,
     updateMessageReadAt,
-    appendMessages,
     messages,
     setConnectionStatus,
+    mergeMissedMessages,
   } = useMessagesConversation();
   const addMessageRef = useRef(addMessage);
   addMessageRef.current = addMessage;
   const updateMessageReadAtRef = useRef(updateMessageReadAt);
   updateMessageReadAtRef.current = updateMessageReadAt;
-  const appendMessagesRef = useRef(appendMessages);
-  appendMessagesRef.current = appendMessages;
+  const mergeMissedMessagesRef = useRef(mergeMissedMessages);
+  mergeMissedMessagesRef.current = mergeMissedMessages;
   const currentUserIdRef = useRef(currentUserId);
   currentUserIdRef.current = currentUserId;
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
-
-  const refetchSinceLastMessage = useCallback(async () => {
-    const msgs = messagesRef.current;
-    if (msgs.length === 0) return;
-    const lastMsg = msgs[msgs.length - 1];
-    const lastCreatedAt = lastMsg?.created_at;
-    if (!lastCreatedAt) return;
-    const result = await fetchMessagesAfter(conversationId, lastCreatedAt);
-    if (result.ok && result.messages && result.messages.length > 0) {
-      appendMessagesRef.current(
-        result.messages.map(normalizeMessageRow),
-      );
-    }
-  }, [conversationId]);
-
-  const refetchRef = useRef(refetchSinceLastMessage);
-  refetchRef.current = refetchSinceLastMessage;
+  const wasDisconnectedRef = useRef(false);
 
   useEffect(() => {
     const supabase = createClient();
@@ -108,14 +92,49 @@ export function ThreadRealtime({
         },
       )
       .subscribe((status) => {
-        setConnectionStatus(status);
-        if (status === "SUBSCRIBED") {
-          void refetchRef.current();
+        switch (status) {
+          case "SUBSCRIBED": {
+            if (wasDisconnectedRef.current) {
+              const msgs = messagesRef.current;
+              const lastCreatedAt =
+                msgs.length > 0 ? msgs[msgs.length - 1].created_at : null;
+              if (lastCreatedAt) {
+                setConnectionStatus("reconnecting");
+                void fetchMessagesSince(conversationId, lastCreatedAt).then(
+                  (result) => {
+                    if (
+                      result.ok &&
+                      result.messages &&
+                      result.messages.length > 0
+                    ) {
+                      mergeMissedMessagesRef.current(
+                        result.messages.map(normalizeMessageRow),
+                      );
+                    }
+                    wasDisconnectedRef.current = false;
+                    setConnectionStatus("connected");
+                  },
+                );
+                return;
+              }
+            }
+            wasDisconnectedRef.current = false;
+            setConnectionStatus("connected");
+            break;
+          }
+          case "CHANNEL_ERROR":
+          case "TIMED_OUT":
+          case "CLOSED":
+            wasDisconnectedRef.current = true;
+            setConnectionStatus("disconnected");
+            break;
+          default:
+            break;
         }
       });
 
     return () => {
-      setConnectionStatus(null);
+      setConnectionStatus("disconnected");
       void supabase.removeChannel(channel);
     };
   }, [conversationId, setConnectionStatus]);

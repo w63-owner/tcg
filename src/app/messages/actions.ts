@@ -340,6 +340,17 @@ export async function fetchMessagesAfter(
 }
 
 /**
+ * Alias de fetchMessagesAfter pour l’API de rattrapage (catch-up).
+ * Récupère les messages créés strictement après afterDate pour la conversation.
+ */
+export async function fetchMessagesSince(
+  conversationId: string,
+  afterDate: string,
+): Promise<FetchMessagesAfterResult> {
+  return fetchMessagesAfter(conversationId, afterDate);
+}
+
+/**
  * Marque des messages spécifiques comme lus.
  * Utilisé par les read receipts basés sur l'IntersectionObserver.
  */
