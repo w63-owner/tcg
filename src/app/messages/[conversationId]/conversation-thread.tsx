@@ -1,9 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
-import { Banknote, CheckCircle2, Package, Handshake, XCircle } from "lucide-react";
+import type { ImageMessageMetadata, SystemMessageMetadata } from "../types";
+import type { ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { Banknote, Check, CheckCircle2, CheckCheck, Package, Handshake, XCircle } from "lucide-react";
 import { AcceptOfferForm } from "./accept-offer-form";
 import { useMessagesConversation } from "./messages-conversation-state";
+import { fetchOlderMessages } from "../actions";
+import type { ThreadMessage } from "./messages-conversation-state";
 
 type OfferData = {
   id: string;
@@ -13,23 +17,31 @@ type OfferData = {
   listing_id: string;
 };
 
-type ThreadMessage = {
-  id: string;
-  sender_id: string;
-  content: string;
-  created_at: string;
-  read_at: string | null;
-  message_type?: string | null;
-  offer_id?: string | null;
-  offer?: OfferData | OfferData[] | null;
-};
-
 type ConversationThreadProps = {
   messages: ThreadMessage[];
   currentUserId: string;
   sellerId: string;
   buyerUsername?: string | null;
+  conversationId: string;
+  counterpartName?: string | null;
 };
+
+function ReadReceiptIcon({ readAt }: { readAt: string | null }) {
+  if (readAt) {
+    return (
+      <CheckCheck
+        className="text-primary size-3.5 shrink-0"
+        aria-label="Lu"
+      />
+    );
+  }
+  return (
+    <Check
+      className="text-muted-foreground size-3.5 shrink-0 opacity-70"
+      aria-label="Envoyé"
+    />
+  );
+}
 
 function toDayKey(value: string) {
   const date = new Date(value);
@@ -65,14 +77,183 @@ function formatEuro(value: number) {
 const SYSTEM_MSG_CLASS =
   "max-w-[85%] rounded-md border border-amber-200 px-3 py-2.5 text-center text-sm text-muted-foreground [background:oklch(0.97_0.015_85)] dark:[background:oklch(0.22_0.03_85)] dark:border-amber-800";
 
+function renderSystemMessage(
+  metadata: SystemMessageMetadata | undefined,
+  contentFallback: string,
+  options: { currentUserId: string; sellerId: string; buyerUsername: string | null },
+): ReactNode {
+  const isSeller = options.currentUserId === options.sellerId;
+  if (!metadata || !metadata.type) {
+    return <p>{contentFallback}</p>;
+  }
+  const data = metadata;
+  if (data.type === "offer_accepted" && typeof data.offer_amount === "number") {
+    const amount = formatEuro(data.offer_amount);
+    return (
+      <>
+        <Handshake className="text-amber-600 dark:text-amber-400 size-5 shrink-0" />
+        <p className="font-semibold text-foreground">Offre acceptée</p>
+        <p className="mt-0">
+          {isSeller ? (
+            <>
+              Vous avez accepté l&apos;offre de {amount}. Nous vous informerons
+              quand {options.buyerUsername ?? "l'acheteur"} aura procédé au paiement.
+            </>
+          ) : (
+            <>
+              Le vendeur a accepté votre offre de {amount}. Vous pouvez désormais
+              procéder au paiement.
+            </>
+          )}
+        </p>
+      </>
+    );
+  }
+  if (data.type === "payment_completed" && typeof data.total_amount === "number") {
+    const amount = formatEuro(data.total_amount);
+    return (
+      <>
+        <Banknote className="text-amber-600 dark:text-amber-400 size-5 shrink-0" />
+        <p className="font-semibold text-foreground">Paiement effectué</p>
+        <p className="mt-0">
+          {isSeller ? (
+            <>
+              L&apos;acheteur a effectué le paiement de {amount}. Tu peux procéder
+              à l&apos;envoi de l&apos;article.
+            </>
+          ) : (
+            <>
+              Paiement effectué ({amount}). Le vendeur va t&apos;envoyer l&apos;article.
+            </>
+          )}
+        </p>
+      </>
+    );
+  }
+  if (data.type === "order_shipped") {
+    return (
+      <>
+        <Package className="text-amber-600 dark:text-amber-400 size-5 shrink-0" />
+        <p className="font-semibold text-foreground">Commande expédiée</p>
+        <p className="mt-0">
+          {isSeller ? (
+            <>
+              Vous avez marqué cette commande comme expédiée. L&apos;acheteur a été
+              invité à confirmer la réception à réception du colis.
+            </>
+          ) : (
+            <>
+              La commande a bien été expédiée. Merci de confirmer la réception de la
+              commande à réception de celle-ci.
+            </>
+          )}
+        </p>
+      </>
+    );
+  }
+  if (data.type === "sale_completed") {
+    const sellerCredit = typeof data.seller_credit === "number" ? data.seller_credit : 0;
+    return (
+      <>
+        <CheckCircle2 className="text-amber-600 dark:text-amber-400 size-5 shrink-0" />
+        <p className="font-semibold text-foreground">Vente terminée</p>
+        <p className="mt-0">
+          {isSeller ? (
+            <>
+              La vente est terminée. Ton solde a été crédité de {formatEuro(sellerCredit)}{" "}
+              (montant de la vente).
+            </>
+          ) : (
+            <>La vente est terminée. Merci pour ta confiance.</>
+          )}
+        </p>
+      </>
+    );
+  }
+  return <p>{contentFallback}</p>;
+}
+
+function normalizeMessageRow(
+  row: {
+    id: string;
+    sender_id: string;
+    content: string;
+    created_at: string;
+    read_at: string | null;
+    message_type?: string | null;
+    offer_id?: string | null;
+    metadata?: unknown;
+    offer?: OfferData | OfferData[] | null;
+  },
+): ThreadMessage {
+  const offer = row.offer;
+  const normalizedOffer = Array.isArray(offer) ? offer[0] ?? null : offer;
+  return {
+    id: row.id,
+    sender_id: row.sender_id,
+    content: row.content,
+    created_at: row.created_at,
+    read_at: row.read_at,
+    message_type: row.message_type,
+    offer_id: row.offer_id,
+    metadata: row.metadata as SystemMessageMetadata | ImageMessageMetadata | undefined,
+    offer: normalizedOffer ?? undefined,
+  };
+}
+
 export function ConversationThread({
   messages,
   currentUserId,
   sellerId,
   buyerUsername = null,
+  conversationId,
+  counterpartName = null,
 }: ConversationThreadProps) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const topSentinelRef = useRef<HTMLDivElement | null>(null);
+  const lastScrollYRef = useRef(0);
+  const {
+    setHeaderVisible,
+    retrySendRef,
+    removeOptimisticMessage,
+    prependMessages,
+    isCounterpartTyping,
+    setHasMore,
+    hasMore,
+    isLoadingOlder,
+    setIsLoadingOlder,
+  } = useMessagesConversation();
+
+  const scrollHeightBeforePrependRef = useRef<number>(0);
+
+  const loadOlder = useCallback(async () => {
+    if (messages.length === 0 || !hasMore || isLoadingOlder) return;
+    const firstCreatedAt = messages[0].created_at;
+    const viewport = viewportRef.current;
+    if (viewport) scrollHeightBeforePrependRef.current = viewport.scrollHeight;
+    setIsLoadingOlder(true);
+    try {
+      const result = await fetchOlderMessages(conversationId, firstCreatedAt);
+      if (!result.ok || !result.messages?.length) {
+        if (result.ok && result.hasMore === false) setHasMore(false);
+        return;
+      }
+      const normalized = result.messages.map(normalizeMessageRow);
+      prependMessages(normalized);
+      if (result.hasMore === false) setHasMore(false);
+    } finally {
+      setIsLoadingOlder(false);
+    }
+  }, [
+    conversationId,
+    hasMore,
+    isLoadingOlder,
+    messages,
+    prependMessages,
+    setHasMore,
+    setIsLoadingOlder,
+  ]);
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
@@ -80,6 +261,50 @@ export function ConversationThread({
     }, 150);
     return () => clearTimeout(timeoutId);
   }, [messages.length]);
+
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    const sentinel = topSentinelRef.current;
+    if (!viewport || !sentinel || !hasMore || isLoadingOlder) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (entry?.isIntersecting) void loadOlder();
+      },
+      { root: viewport, rootMargin: "50px", threshold: 0 },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMore, isLoadingOlder, loadOlder]);
+
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    const prevHeight = scrollHeightBeforePrependRef.current;
+    if (viewport && prevHeight > 0) {
+      const delta = viewport.scrollHeight - prevHeight;
+      if (delta > 0) viewport.scrollTop += delta;
+      scrollHeightBeforePrependRef.current = 0;
+    }
+  }, [messages.length]);
+
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+    const handleScroll = () => {
+      const y = el.scrollTop;
+      const prev = lastScrollYRef.current;
+      lastScrollYRef.current = y;
+      if (y <= 10) {
+        setHeaderVisible(true);
+      } else if (y > prev) {
+        setHeaderVisible(false);
+      } else if (y < prev) {
+        setHeaderVisible(true);
+      }
+    };
+    el.addEventListener("scroll", handleScroll, { passive: true });
+    return () => el.removeEventListener("scroll", handleScroll);
+  }, [setHeaderVisible]);
 
   const rows = useMemo(() => {
     return messages.map((message, index) => {
@@ -92,7 +317,7 @@ export function ConversationThread({
 
   if (messages.length === 0) {
     return (
-      <div className="text-muted-foreground m-auto rounded-md border px-4 py-2 text-sm">
+      <div className="text-muted-foreground m-auto text-center text-sm">
         Commence la conversation.
       </div>
     );
@@ -100,6 +325,12 @@ export function ConversationThread({
 
   return (
     <div ref={viewportRef} className="flex h-full flex-col gap-3 overflow-y-auto">
+      <div ref={topSentinelRef} className="h-1 shrink-0" aria-hidden />
+      {isLoadingOlder ? (
+        <div className="text-muted-foreground py-2 text-center text-xs">
+          Chargement...
+        </div>
+      ) : null}
       {rows.map(({ message, showDaySeparator }) => {
         const isMine = message.sender_id === currentUserId;
         const offer = message.message_type === "offer" ? pickOne(message.offer) : null;
@@ -118,127 +349,17 @@ export function ConversationThread({
             {message.message_type === "system" ? (
               <div className="flex justify-center">
                 <div className={`flex flex-col items-center gap-1.5 ${SYSTEM_MSG_CLASS}`}>
-                  {(() => {
-                    try {
-                      const data = JSON.parse(message.content) as {
-                        type?: string;
-                        offer_amount?: number;
-                        total_amount?: number;
-                        seller_credit?: number;
-                      };
-                      const isSeller = currentUserId === sellerId;
-                      if (data.type === "offer_accepted" && typeof data.offer_amount === "number") {
-                        const amount = formatEuro(data.offer_amount);
-                        if (isSeller) {
-                          const buyerName = buyerUsername ?? "l'acheteur";
-                          return (
-                            <>
-                              <Handshake className="text-amber-600 dark:text-amber-400 size-5 shrink-0" />
-                              <p className="font-semibold text-foreground">Offre acceptée</p>
-                              <p className="mt-0">
-                                Vous avez accepté l&apos;offre de {amount}. Nous vous informerons
-                                quand {buyerName} aura procédé au paiement.
-                              </p>
-                            </>
-                          );
-                        }
-                        return (
-                          <>
-                            <Handshake className="text-amber-600 dark:text-amber-400 size-5 shrink-0" />
-                            <p className="font-semibold text-foreground">Offre acceptée</p>
-                            <p className="mt-0">
-                              Le vendeur a accepté votre offre de {amount}. Vous pouvez désormais
-                              procéder au paiement.
-                            </p>
-                          </>
-                        );
-                      }
-                      if (data.type === "payment_completed" && typeof data.total_amount === "number") {
-                        const amount = formatEuro(data.total_amount);
-                        if (isSeller) {
-                          return (
-                            <>
-                              <Banknote className="text-amber-600 dark:text-amber-400 size-5 shrink-0" />
-                              <p className="font-semibold text-foreground">Paiement effectué</p>
-                              <p className="mt-0">
-                                L&apos;acheteur a effectué le paiement de {amount}. Tu peux procéder
-                                à l&apos;envoi de l&apos;article.
-                              </p>
-                            </>
-                          );
-                        }
-                        return (
-                          <>
-                            <Banknote className="text-amber-600 dark:text-amber-400 size-5 shrink-0" />
-                            <p className="font-semibold text-foreground">Paiement effectué</p>
-                            <p className="mt-0">
-                              Paiement effectué ({amount}). Le vendeur va t&apos;envoyer
-                              l&apos;article.
-                            </p>
-                          </>
-                        );
-                      }
-                      if (data.type === "order_shipped") {
-                        if (isSeller) {
-                          return (
-                            <>
-                              <Package className="text-amber-600 dark:text-amber-400 size-5 shrink-0" />
-                              <p className="font-semibold text-foreground">Commande expédiée</p>
-                              <p className="mt-0">
-                                Vous avez marqué cette commande comme expédiée. L&apos;acheteur a été
-                                invité à confirmer la réception à réception du colis.
-                              </p>
-                            </>
-                          );
-                        }
-                        return (
-                          <>
-                            <Package className="text-amber-600 dark:text-amber-400 size-5 shrink-0" />
-                            <p className="font-semibold text-foreground">Commande expédiée</p>
-                            <p className="mt-0">
-                              La commande a bien été expédiée. Merci de confirmer la réception de la
-                              commande à réception de celle-ci.
-                            </p>
-                          </>
-                        );
-                      }
-                      if (data.type === "sale_completed") {
-                        const sellerCredit =
-                          typeof data.seller_credit === "number" ? data.seller_credit : 0;
-                        if (isSeller) {
-                          return (
-                            <>
-                              <CheckCircle2 className="text-amber-600 dark:text-amber-400 size-5 shrink-0" />
-                              <p className="font-semibold text-foreground">Vente terminée</p>
-                              <p className="mt-0">
-                                La vente est terminée. Ton solde a été crédité de{" "}
-                                {formatEuro(sellerCredit)} (montant de la vente).
-                              </p>
-                            </>
-                          );
-                        }
-                        return (
-                          <>
-                            <CheckCircle2 className="text-amber-600 dark:text-amber-400 size-5 shrink-0" />
-                            <p className="font-semibold text-foreground">Vente terminée</p>
-                            <p className="mt-0">La vente est terminée. Merci pour ta confiance.</p>
-                          </>
-                        );
-                      }
-                    } catch {
-                      /* not JSON, fallback to legacy display */
-                    }
-                    const parts = message.content.split("\n\n");
-                    if (parts.length >= 2) {
-                      return (
-                        <>
-                          <p className="font-semibold text-foreground">{parts[0]}</p>
-                          <p className="mt-0">{parts.slice(1).join("\n\n")}</p>
-                        </>
-                      );
-                    }
-                    return <p>{message.content}</p>;
-                  })()}
+                  {renderSystemMessage(
+                    message.metadata && "type" in message.metadata
+                      ? (message.metadata as SystemMessageMetadata)
+                      : undefined,
+                    message.content,
+                    {
+                      currentUserId,
+                      sellerId,
+                      buyerUsername: buyerUsername ?? null,
+                    },
+                  )}
                 </div>
               </div>
             ) : (
@@ -246,11 +367,13 @@ export function ConversationThread({
               <div className={`flex ${isMine ? "justify-end" : "justify-start"}`}>
                 {offer ? (
                   <div
-                    className={`max-w-[85%] rounded-lg border px-3 py-2.5 text-sm ${
+                    className={`relative max-w-[85%] rounded-lg border px-3 py-2.5 text-sm ${
                       isMine ? "bg-primary/10" : "bg-muted/40"
                     }`}
                   >
-                    <p className="font-medium">
+                    <div className="flex items-end justify-end gap-1.5">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium">
                       Offre : {new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", minimumFractionDigits: 2 }).format(offer.offer_amount)}
                     </p>
                     <p className="text-muted-foreground mt-0.5 text-xs capitalize">
@@ -265,22 +388,56 @@ export function ConversationThread({
                         <AcceptOfferForm offerId={offer.id} />
                       </div>
                     ) : null}
+                      </div>
+                      {isMine ? (
+                        <ReadReceiptIcon readAt={message.read_at} />
+                      ) : null}
+                    </div>
                   </div>
-                ) : message.message_type === "offer" ? (
+                ) : message.message_type === "image" &&
+                  message.metadata &&
+                  "image_url" in message.metadata &&
+                  typeof (message.metadata as ImageMessageMetadata).image_url === "string" ? (
                   <div
-                    className={`max-w-[85%] rounded-lg border px-3 py-2.5 text-sm ${
+                    className={`flex max-w-[85%] items-end justify-end gap-1.5 rounded-lg border px-3 py-2.5 text-sm ${
                       isMine ? "bg-primary/10" : "bg-muted/40"
                     }`}
                   >
-                    <p className="text-muted-foreground italic text-sm">
+                    <a
+                      href={(message.metadata as ImageMessageMetadata).image_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block overflow-hidden rounded-md"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={(message.metadata as ImageMessageMetadata).image_url}
+                        alt="Image envoyée"
+                        className="max-h-[280px] max-w-[250px] rounded-md object-contain"
+                      />
+                    </a>
+                    {isMine ? (
+                      <ReadReceiptIcon readAt={message.read_at} />
+                    ) : null}
+                  </div>
+                ) : message.message_type === "offer" ? (
+                  <div
+                    className={`flex max-w-[85%] items-end justify-end gap-1.5 rounded-lg border px-3 py-2.5 text-sm ${
+                      isMine ? "bg-primary/10" : "bg-muted/40"
+                    }`}
+                  >
+                    <p className="text-muted-foreground min-w-0 flex-1 italic text-sm">
                       {message.content?.trim()
                         ? message.content
                         : "Nouvelle offre reçue"}
                     </p>
+                    {isMine ? (
+                      <ReadReceiptIcon readAt={message.read_at} />
+                    ) : null}
                   </div>
                 ) : (
                   <div
-                    className={`max-w-[85%] rounded-lg border px-3 py-2.5 text-sm ${
+                    className={`flex max-w-[85%] items-end justify-end gap-1.5 rounded-lg border px-3 py-2.5 text-sm ${
                       message.message_type === "optimistic_failed"
                         ? "border-destructive/50 bg-destructive/10"
                         : isMine
@@ -288,12 +445,24 @@ export function ConversationThread({
                           : "bg-muted/40"
                     }`}
                   >
+                    <div className="min-w-0 flex-1">
                     <p>{message.content}</p>
                     {message.message_type === "optimistic_failed" && (
-                      <p className="text-destructive mt-1 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          removeOptimisticMessage(message.id);
+                          void retrySendRef.current?.(message.content);
+                        }}
+                        className="text-destructive hover:underline mt-1 text-xs font-medium"
+                      >
                         Échec de l&apos;envoi. Réessaie.
-                      </p>
+                      </button>
                     )}
+                    </div>
+                    {isMine ? (
+                      <ReadReceiptIcon readAt={message.read_at} />
+                    ) : null}
                   </div>
                 )}
               </div>
@@ -329,22 +498,40 @@ export function ConversationThread({
           </div>
         );
       })}
+      {isCounterpartTyping ? (
+        <div className="flex justify-start">
+          <div className="bg-muted/60 flex items-center gap-1.5 rounded-2xl rounded-bl-sm px-3 py-2 text-sm">
+            <span className="flex gap-0.5" aria-hidden>
+              <span className="bg-muted-foreground size-1.5 animate-bounce rounded-full [animation-delay:0ms]" />
+              <span className="bg-muted-foreground size-1.5 animate-bounce rounded-full [animation-delay:150ms]" />
+              <span className="bg-muted-foreground size-1.5 animate-bounce rounded-full [animation-delay:300ms]" />
+            </span>
+            <span className="text-muted-foreground text-xs">
+              {counterpartName ? `${counterpartName} écrit...` : "L'utilisateur écrit..."}
+            </span>
+          </div>
+        </div>
+      ) : null}
       <div ref={bottomRef} />
     </div>
   );
 }
 
 type ConversationThreadConnectedProps = {
+  conversationId: string;
   currentUserId: string;
   sellerId: string;
   buyerUsername?: string | null;
+  counterpartName?: string | null;
 };
 
 /** Version connectée au contexte : lit les messages depuis l’état client. */
 export function ConversationThreadConnected({
+  conversationId,
   currentUserId,
   sellerId,
   buyerUsername = null,
+  counterpartName = null,
 }: ConversationThreadConnectedProps) {
   const { messages } = useMessagesConversation();
   return (
@@ -353,6 +540,8 @@ export function ConversationThreadConnected({
       currentUserId={currentUserId}
       sellerId={sellerId}
       buyerUsername={buyerUsername}
+      conversationId={conversationId}
+      counterpartName={counterpartName}
     />
   );
 }

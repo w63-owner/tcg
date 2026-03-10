@@ -8,8 +8,6 @@ import {
 } from "./messages-conversation-state";
 import { markConversationReadSilentAction } from "@/app/messages/actions";
 
-const REALTIME_SUBSCRIBE_DELAY_MS = 400;
-
 type ThreadRealtimeProps = {
   conversationId: string;
   currentUserId: string;
@@ -19,47 +17,58 @@ export function ThreadRealtime({
   conversationId,
   currentUserId,
 }: ThreadRealtimeProps) {
-  const { addMessage } = useMessagesConversation();
+  const { addMessage, updateMessageReadAt } = useMessagesConversation();
   const addMessageRef = useRef(addMessage);
   addMessageRef.current = addMessage;
+  const updateMessageReadAtRef = useRef(updateMessageReadAt);
+  updateMessageReadAtRef.current = updateMessageReadAt;
 
   useEffect(() => {
-    let channel: ReturnType<ReturnType<typeof createClient>["channel"]> | null =
-      null;
-    const timeoutId = window.setTimeout(() => {
-      const supabase = createClient();
-      channel = supabase
-        .channel(`messages:${conversationId}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "messages",
-            filter: `conversation_id=eq.${conversationId}`,
-          },
-          (payload) => {
-            const raw = payload.new as Record<string, unknown>;
-            if (raw && typeof raw === "object") {
-              const msg = normalizeRealtimeMessage(raw);
-              addMessageRef.current(msg);
-              if (msg.sender_id !== currentUserId) {
-                const formData = new FormData();
-                formData.set("conversation_id", conversationId);
-                void markConversationReadSilentAction(formData);
-              }
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`messages:${conversationId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        (payload) => {
+          const raw = payload.new as Record<string, unknown>;
+          if (raw && typeof raw === "object") {
+            const msg = normalizeRealtimeMessage(raw);
+            addMessageRef.current(msg);
+            if (msg.sender_id !== currentUserId) {
+              const formData = new FormData();
+              formData.set("conversation_id", conversationId);
+              void markConversationReadSilentAction(formData);
             }
-          },
-        )
-        .subscribe();
-    }, REALTIME_SUBSCRIBE_DELAY_MS);
+          }
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "messages",
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        (payload) => {
+          const raw = payload.new as Record<string, unknown>;
+          if (raw && typeof raw === "object" && typeof raw.id === "string") {
+            const readAt =
+              raw.read_at != null ? String(raw.read_at) : null;
+            updateMessageReadAtRef.current(raw.id, readAt);
+          }
+        },
+      )
+      .subscribe();
 
     return () => {
-      window.clearTimeout(timeoutId);
-      if (channel) {
-        const supabase = createClient();
-        void supabase.removeChannel(channel);
-      }
+      void supabase.removeChannel(channel);
     };
   }, [conversationId, currentUserId]);
 

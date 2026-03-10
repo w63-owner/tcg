@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { AppShell } from "@/components/layout/app-shell";
+import { UnreadMessagesLayout } from "@/app/messages/unread-messages-layout";
 import { Toaster } from "@/components/ui/toaster";
 import { PublishedListingToast } from "@/components/marketplace/published-listing-toast";
 import { ServiceWorkerRegister } from "@/components/pwa/service-worker-register";
@@ -58,7 +59,9 @@ export default function RootLayout({
         <QueryProvider>
           <ServiceWorkerRegister />
           <InstallPrompt />
-          <AppShell>{children}</AppShell>
+          <UnreadMessagesLayout>
+            <AppShell>{children}</AppShell>
+          </UnreadMessagesLayout>
           <Suspense fallback={null}>
             <PublishedListingToast />
           </Suspense>

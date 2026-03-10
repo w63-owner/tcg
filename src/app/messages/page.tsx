@@ -27,6 +27,13 @@ type MessagePreview = {
   content: string;
   created_at: string;
   sender_id: string;
+  message_type?: string | null;
+  metadata?: {
+    type?: string;
+    offer_amount?: number;
+    total_amount?: number;
+    seller_credit?: number;
+  } | null;
 };
 
 function pickOne<T>(value: T | T[] | null | undefined): T | null {
@@ -61,16 +68,19 @@ function formatRelativeTime(value: string) {
 
 /** Returns user-friendly preview text for the latest message (e.g. system/offer_accepted). */
 function getMessagePreview(
-  content: string,
+  msg: { content: string; metadata?: { type?: string } | null },
   options: { currentUserId: string; sellerId: string },
 ): string {
-  try {
-    const data = JSON.parse(content) as {
-      type?: string;
-      offer_amount?: number;
-      total_amount?: number;
-    };
-    if (data.type === "offer_accepted") {
+  const data = msg.metadata ?? (() => {
+    try {
+      const parsed = JSON.parse(msg.content) as { type?: string };
+      return parsed?.type ? parsed : null;
+    } catch {
+      return null;
+    }
+  })();
+  if (!data) return msg.content;
+  if (data.type === "offer_accepted") {
       const isSeller = options.currentUserId === options.sellerId;
       return isSeller
         ? "Vous avez accepté l'offre."
@@ -94,10 +104,7 @@ function getMessagePreview(
         ? "Vente terminée. Solde crédité."
         : "Vente terminée.";
     }
-  } catch {
-    /* not JSON, use as-is */
-  }
-  return content;
+  return msg.content;
 }
 
 export default async function MessagesPage({ searchParams }: MessagesPageProps) {
@@ -152,7 +159,7 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
         .neq("sender_id", user.id),
       supabase
         .from("messages")
-        .select("conversation_id, content, created_at, sender_id")
+        .select("conversation_id, content, created_at, sender_id, message_type, metadata")
         .in("conversation_id", conversationIds)
         .order("created_at", { ascending: false }),
     ]);
@@ -168,6 +175,8 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
           content: row.content,
           created_at: row.created_at,
           sender_id: row.sender_id,
+          message_type: row.message_type,
+          metadata: row.metadata,
         });
       }
     }
@@ -246,7 +255,7 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
                     </p>
                     <p className="text-muted-foreground line-clamp-1 text-xs">
                       {conversation.latestMessage
-                        ? getMessagePreview(conversation.latestMessage.content, {
+                        ? getMessagePreview(conversation.latestMessage, {
                             currentUserId: user.id,
                             sellerId: conversation.seller_id,
                           })

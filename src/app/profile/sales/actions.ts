@@ -115,12 +115,12 @@ export async function markAsShippedAction(
       },
     );
     if (!rpcError && conversationId) {
-      const orderShippedContent = JSON.stringify({ type: "order_shipped" });
       await admin.from("messages").insert({
         conversation_id: conversationId,
         sender_id: tx.seller_id,
+        content: "Commande expédiée",
         message_type: "system",
-        content: orderShippedContent,
+        metadata: { type: "order_shipped" },
       });
       revalidatePath("/messages");
       revalidatePath(`/messages/${conversationId}`);

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { logError, logInfo } from "@/lib/observability";
+import { sendPushToRecipient } from "@/lib/push/send-notification";
 
 export async function createConversationForListingAction(formData: FormData) {
   const listingId = String(formData.get("listing_id") ?? "").trim();
@@ -100,6 +101,12 @@ export async function sendMessageAction(formData: FormData) {
     return;
   }
 
+  const { data: conv } = await supabase
+    .from("conversations")
+    .select("buyer_id, seller_id")
+    .eq("id", conversationId)
+    .maybeSingle<{ buyer_id: string; seller_id: string }>();
+
   const { error } = await supabase.from("messages").insert({
     conversation_id: conversationId,
     sender_id: user.id,
@@ -112,6 +119,15 @@ export async function sendMessageAction(formData: FormData) {
       context: { conversationId, userId: user.id },
     });
     return;
+  }
+
+  if (conv) {
+    const recipientId = conv.buyer_id === user.id ? conv.seller_id : conv.buyer_id;
+    void sendPushToRecipient(recipientId, {
+      title: "Nouveau message",
+      body: content.slice(0, 100),
+      url: `/messages/${conversationId}`,
+    });
   }
 
   await supabase
@@ -159,9 +175,114 @@ export async function markConversationReadAction(formData: FormData) {
 }
 
 /**
+ * Compte le nombre total de messages non lus pour l'utilisateur connecté.
+ * Utilisé pour le badge de messagerie (navigation).
+ */
+export async function getUnreadMessagesCount(): Promise<number> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return 0;
+
+  const { data: convs } = await supabase
+    .from("conversations")
+    .select("id")
+    .or(`buyer_id.eq.${user.id},seller_id.eq.${user.id}`);
+  const ids = (convs ?? []).map((c) => c.id);
+  if (ids.length === 0) return 0;
+
+  const { count } = await supabase
+    .from("messages")
+    .select("id", { count: "exact", head: true })
+    .in("conversation_id", ids)
+    .is("read_at", null)
+    .neq("sender_id", user.id);
+  return count ?? 0;
+}
+
+/**
  * Marque les messages non lus de la conversation comme lus, sans revalidatePath.
  * À utiliser depuis le Realtime (WebSockets) pour ne pas déclencher de re-render serveur.
  */
+const MESSAGES_PAGE_SIZE = 50;
+
+export type FetchOlderMessagesRow = {
+  id: string;
+  sender_id: string;
+  content: string;
+  created_at: string;
+  read_at: string | null;
+  message_type?: string | null;
+  offer_id?: string | null;
+  metadata?: unknown;
+  offer?:
+    | { id: string; offer_amount: number; status: string; buyer_id: string; listing_id: string }
+    | Array<{ id: string; offer_amount: number; status: string; buyer_id: string; listing_id: string }>
+    | null;
+};
+
+export type FetchOlderMessagesResult = {
+  ok: boolean;
+  messages?: FetchOlderMessagesRow[];
+  hasMore?: boolean;
+  error?: string;
+};
+
+export async function fetchOlderMessages(
+  conversationId: string,
+  beforeDate: string,
+): Promise<FetchOlderMessagesResult> {
+  if (!conversationId || !beforeDate) {
+    return { ok: false, error: "Paramètres invalides." };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { ok: false, error: "Non connecté." };
+  }
+
+  const { data: conversation } = await supabase
+    .from("conversations")
+    .select("id")
+    .eq("id", conversationId)
+    .maybeSingle<{ id: string }>();
+
+  if (!conversation) {
+    return { ok: false, error: "Conversation introuvable." };
+  }
+
+  const { data: messages, error } = await supabase
+    .from("messages")
+    .select("id, sender_id, content, created_at, read_at, message_type, offer_id, metadata, offer:offers(id, offer_amount, status, buyer_id, listing_id)")
+    .eq("conversation_id", conversationId)
+    .lt("created_at", beforeDate)
+    .order("created_at", { ascending: false })
+    .limit(MESSAGES_PAGE_SIZE);
+
+  if (error) {
+    logError({
+      event: "fetch_older_messages_failed",
+      message: error.message,
+      context: { conversationId },
+    });
+    return { ok: false, error: error.message };
+  }
+
+  const rows = (messages ?? []) as FetchOlderMessagesRow[];
+  const chronological = [...rows].reverse();
+  const hasMore = rows.length === MESSAGES_PAGE_SIZE;
+
+  return {
+    ok: true,
+    messages: chronological,
+    hasMore,
+  };
+}
+
 export async function markConversationReadSilentAction(formData: FormData) {
   const conversationId = String(formData.get("conversation_id") ?? "").trim();
   if (!conversationId) return;
@@ -178,6 +299,147 @@ export async function markConversationReadSilentAction(formData: FormData) {
     .eq("conversation_id", conversationId)
     .is("read_at", null)
     .neq("sender_id", user.id);
+}
+
+export type UploadMessageImageResult = {
+  ok: boolean;
+  message?: {
+    id: string;
+    sender_id: string;
+    content: string;
+    created_at: string;
+    read_at: string | null;
+    message_type: string;
+    metadata: { image_url: string };
+  };
+  error?: string;
+};
+
+export async function uploadMessageImageAction(
+  conversationId: string,
+  formData: FormData,
+): Promise<UploadMessageImageResult> {
+  const trimmedId = String(conversationId ?? "").trim();
+  if (!trimmedId) {
+    return { ok: false, error: "Conversation invalide." };
+  }
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    return { ok: false, error: "Aucun fichier sélectionné." };
+  }
+
+  const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
+  if (!allowedTypes.includes(file.type)) {
+    return { ok: false, error: "Format non accepté (JPEG, PNG, WebP uniquement)." };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { ok: false, error: "Connecte-toi pour envoyer une image." };
+  }
+
+  const { data: conversation } = await supabase
+    .from("conversations")
+    .select("id, buyer_id, seller_id")
+    .eq("id", trimmedId)
+    .maybeSingle<{ id: string; buyer_id: string; seller_id: string }>();
+
+  if (!conversation || (conversation.buyer_id !== user.id && conversation.seller_id !== user.id)) {
+    return { ok: false, error: "Tu ne fais pas partie de cette conversation." };
+  }
+
+  const ext = file.name.split(".").pop() || "jpg";
+  const safeExt = ["jpeg", "jpg", "png", "webp"].includes(ext.toLowerCase())
+    ? ext.toLowerCase()
+    : "jpg";
+  const path = `${trimmedId}/${crypto.randomUUID()}-${Date.now()}.${safeExt}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from("message_attachments")
+    .upload(path, file, {
+      upsert: false,
+      contentType: file.type || "image/jpeg",
+    });
+
+  if (uploadError) {
+    logError({
+      event: "message_image_upload_failed",
+      message: uploadError.message,
+      context: { conversationId: trimmedId, userId: user.id },
+    });
+    return { ok: false, error: "Impossible d'uploader l'image." };
+  }
+
+  const { data: urlData } = supabase.storage
+    .from("message_attachments")
+    .getPublicUrl(path);
+  const publicUrl = urlData.publicUrl;
+
+  const { data: message, error: insertError } = await supabase
+    .from("messages")
+    .insert({
+      conversation_id: trimmedId,
+      sender_id: user.id,
+      content: "Image envoyée",
+      message_type: "image",
+      metadata: { image_url: publicUrl },
+    })
+    .select("id, sender_id, content, created_at, read_at, message_type, metadata")
+    .single<{
+      id: string;
+      sender_id: string;
+      content: string;
+      created_at: string;
+      read_at: string | null;
+      message_type: string;
+      metadata: { image_url: string } | null;
+    }>();
+
+  if (insertError || !message) {
+    logError({
+      event: "message_image_insert_failed",
+      message: insertError?.message ?? "insert failed",
+      context: { conversationId: trimmedId, userId: user.id },
+    });
+    return { ok: false, error: "Image uploadée mais erreur lors de l'enregistrement." };
+  }
+
+  await supabase
+    .from("conversations")
+    .update({ updated_at: new Date().toISOString() })
+    .eq("id", trimmedId);
+
+  const recipientId =
+    conversation.buyer_id === user.id ? conversation.seller_id : conversation.buyer_id;
+  void sendPushToRecipient(recipientId, {
+    title: "Nouveau message",
+    body: "Image envoyée",
+    url: `/messages/${trimmedId}`,
+  });
+
+  revalidatePath("/messages");
+  revalidatePath(`/messages/${trimmedId}`);
+  logInfo({
+    event: "message_image_sent",
+    context: { conversationId: trimmedId, messageId: message.id, userId: user.id },
+  });
+
+  return {
+    ok: true,
+    message: {
+      id: message.id,
+      sender_id: message.sender_id,
+      content: message.content,
+      created_at: message.created_at,
+      read_at: message.read_at,
+      message_type: message.message_type,
+      metadata: { image_url: publicUrl },
+    },
+  };
 }
 
 export type SubmitOfferFromConversationResult = {
@@ -283,6 +545,13 @@ export async function submitOfferFromConversationAction(
     .from("conversations")
     .update({ updated_at: new Date().toISOString() })
     .eq("id", conversationId);
+
+  const recipientId = conversation.seller_id;
+  void sendPushToRecipient(recipientId, {
+    title: "Nouvelle offre",
+    body: `Offre : ${offerAmount.toFixed(2)} €`,
+    url: `/messages/${conversationId}`,
+  });
 
   revalidatePath("/messages");
   revalidatePath(`/messages/${conversationId}`);

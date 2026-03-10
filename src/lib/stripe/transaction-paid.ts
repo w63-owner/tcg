@@ -269,16 +269,15 @@ export async function ensureTransactionConversation(
       return;
     }
 
-    const paymentMessageContent = JSON.stringify({
-      type: "payment_completed",
-      total_amount: Number(tx.total_amount),
-    });
-
     const { error: insertError } = await admin.from("messages").insert({
       conversation_id: conversationId,
       sender_id: tx.buyer_id,
+      content: "Paiement effectué",
       message_type: "system",
-      content: paymentMessageContent,
+      metadata: {
+        type: "payment_completed",
+        total_amount: Number(tx.total_amount),
+      },
     });
 
     if (insertError) {
