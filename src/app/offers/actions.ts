@@ -89,15 +89,15 @@ export async function respondToOfferAction(formData: FormData) {
     const conversationId = convId as string | null;
 
     if (conversationId && fullOffer) {
-      const systemContent = JSON.stringify({
-        type: "offer_accepted",
-        offer_amount: fullOffer.offer_amount,
-      });
       await supabase.from("messages").insert({
         conversation_id: conversationId,
         sender_id: user.id,
-        content: systemContent,
+        content: "Offre acceptée",
         message_type: "system",
+        metadata: {
+          type: "offer_accepted",
+          offer_amount: fullOffer.offer_amount,
+        },
       });
     }
 

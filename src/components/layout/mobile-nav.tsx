@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ComponentType } from "react";
 import { CirclePlus, Heart, House, MessageCircle, User } from "lucide-react";
+import { useUnreadMessages } from "@/app/messages/unread-messages-provider";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
@@ -21,16 +22,13 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/profile", label: "Compte", icon: User },
 ];
 
-type MobileNavProps = {
-  messagesUnreadCount?: number;
-};
-
 function isActiveRoute(pathname: string, href: string) {
   if (href === "/") return pathname === "/";
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function MobileNav({ messagesUnreadCount = 0 }: MobileNavProps) {
+export function MobileNav() {
+  const { unreadCount } = useUnreadMessages();
   const pathname = usePathname();
   const hideOnSellFlow = pathname === "/sell" || pathname.startsWith("/sell/");
   const hideOnSearch = pathname === "/search" || pathname.startsWith("/search/");
@@ -52,7 +50,7 @@ export function MobileNav({ messagesUnreadCount = 0 }: MobileNavProps) {
             const Icon = item.icon;
             const active = isActiveRoute(pathname, item.href);
             const isSellItem = item.href === "/sell";
-            const unread = item.showBadge ? messagesUnreadCount : 0;
+            const unread = item.showBadge ? unreadCount : 0;
             return (
               <li key={item.href}>
                 <Link

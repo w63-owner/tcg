@@ -1,10 +1,7 @@
-import Link from "next/link";
-import Image from "next/image";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { requireAuthenticatedUser } from "@/lib/auth/require-authenticated-user";
 import { ThreadRealtime } from "./thread-realtime";
+import { ConversationHeader } from "./conversation-header";
 import { ConversationLiveControls } from "./conversation-live-controls";
 import { ConversationThreadConnected } from "./conversation-thread";
 import { MessagesConversationProvider } from "./messages-conversation-state";
@@ -50,6 +47,8 @@ type OfferRow = {
   listing_id: string;
 };
 
+import type { ImageMessageMetadata, SystemMessageMetadata } from "../types";
+
 type MessageRow = {
   id: string;
   sender_id: string;
@@ -59,6 +58,7 @@ type MessageRow = {
   message_type?: string | null;
   offer_id?: string | null;
   offer?: OfferRow | OfferRow[] | null;
+  metadata?: SystemMessageMetadata | ImageMessageMetadata;
 };
 
 type MessagesThreadPageProps = {
@@ -104,36 +104,40 @@ export default async function MessagesThreadPage({
 
   const { data: messages } = await supabase
     .from("messages")
-    .select("id, sender_id, content, created_at, read_at, message_type, offer_id, offer:offers(id, offer_amount, status, buyer_id, listing_id)")
+    .select("id, sender_id, content, created_at, read_at, message_type, offer_id, metadata, offer:offers(id, offer_amount, status, buyer_id, listing_id)")
     .eq("conversation_id", conversation.id)
     .order("created_at", { ascending: true })
-    .limit(200);
+    .limit(50);
 
-  const { data: acceptedOfferRow } = await supabase
-    .from("offers")
-    .select("id")
-    .eq("conversation_id", conversation.id)
-    .eq("buyer_id", user.id)
-    .eq("status", "ACCEPTED")
-    .maybeSingle<{ id: string }>();
+  const [acceptedOfferRes, pendingOfferRes, paidTransactionRes] = await Promise.all([
+    supabase
+      .from("offers")
+      .select("id")
+      .eq("conversation_id", conversation.id)
+      .eq("buyer_id", user.id)
+      .eq("status", "ACCEPTED")
+      .maybeSingle<{ id: string }>(),
+    supabase
+      .from("offers")
+      .select("id")
+      .eq("conversation_id", conversation.id)
+      .eq("buyer_id", user.id)
+      .eq("status", "PENDING")
+      .maybeSingle<{ id: string }>(),
+    supabase
+      .from("transactions")
+      .select("id")
+      .eq("listing_id", conversation.listing_id)
+      .eq("buyer_id", conversation.buyer_id)
+      .eq("seller_id", conversation.seller_id)
+      .eq("status", "PAID")
+      .limit(1)
+      .maybeSingle<{ id: string }>(),
+  ]);
 
-  const { data: pendingOfferRow } = await supabase
-    .from("offers")
-    .select("id")
-    .eq("conversation_id", conversation.id)
-    .eq("buyer_id", user.id)
-    .eq("status", "PENDING")
-    .maybeSingle<{ id: string }>();
-
-  const { data: paidTransactionRow } = await supabase
-    .from("transactions")
-    .select("id")
-    .eq("listing_id", conversation.listing_id)
-    .eq("buyer_id", conversation.buyer_id)
-    .eq("seller_id", conversation.seller_id)
-    .eq("status", "PAID")
-    .limit(1)
-    .maybeSingle<{ id: string }>();
+  const acceptedOfferRow = acceptedOfferRes.data;
+  const pendingOfferRow = pendingOfferRes.data;
+  const paidTransactionRow = paidTransactionRes.data;
 
   const rows = (messages ?? []) as MessageRow[];
   const counterpart =
@@ -231,66 +235,24 @@ export default async function MessagesThreadPage({
         initialMessages={rows}
         conversationId={conversation.id}
         currentUserId={user.id}
+        initialHasMore={rows.length >= 50}
       >
         <ThreadRealtime conversationId={conversation.id} currentUserId={user.id} />
 
-        <header className="relative flex items-center justify-center">
-        <Button asChild variant="ghost" size="icon" className="absolute left-0 h-9 w-9">
-          <Link href="/messages" aria-label="Retour aux conversations">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-        </Button>
-        <Link
-          href={
-            counterpart
-              ? `/u/${encodeURIComponent(counterpart)}`
-              : `/messages/${conversation.id}/profile`
-          }
-          className="text-center text-sm font-semibold hover:underline"
-        >
-          {counterpart ?? "Utilisateur"}
-        </Link>
-      </header>
-
-      <div className="rounded-md border p-3">
-        {listing ? (
-          <Link
-            href={`/listing/${listing.id}`}
-            className="flex items-center gap-3 transition-colors hover:bg-muted/40"
-          >
-            <div className="bg-muted relative h-14 w-12 shrink-0 overflow-hidden rounded-sm border">
-              {listing.cover_image_url ? (
-                <Image
-                  src={listing.cover_image_url}
-                  alt={listing.title}
-                  fill
-                  sizes="48px"
-                  className="object-cover"
-                />
-              ) : null}
-            </div>
-            <div className="min-w-0">
-              <p className="line-clamp-1 text-sm font-semibold">{listing.title}</p>
-              <p className="text-muted-foreground text-xs">
-                {typeof listingPrice === "number"
-                  ? `${listingPrice.toFixed(2)} EUR`
-                  : "Prix indisponible"}
-              </p>
-            </div>
-          </Link>
-        ) : (
-          <p className="text-muted-foreground text-xs">
-            Informations annonce indisponibles.
-          </p>
-        )}
-      </div>
+        <ConversationHeader
+          conversationId={conversation.id}
+          counterpart={counterpart ?? null}
+          listing={listing}
+        />
 
       <div className="flex-1 overflow-hidden">
         <div className="h-full pt-3">
           <ConversationThreadConnected
+            conversationId={conversation.id}
             currentUserId={user.id}
             sellerId={conversation.seller_id}
             buyerUsername={pickOne(conversation.buyer)?.username ?? null}
+            counterpartName={counterpart ?? null}
           />
         </div>
       </div>

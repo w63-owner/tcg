@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { getSupabasePublicEnv } from "@/lib/env";
 import { logError, logInfo } from "@/lib/observability";
+import { sendPushToRecipient } from "@/lib/push/send-notification";
 
 type SendMessageBody = {
   conversationId?: string;
@@ -88,6 +89,14 @@ export async function POST(request: Request) {
       .from("conversations")
       .update({ updated_at: new Date().toISOString() })
       .eq("id", conversationId);
+
+    const recipientId =
+      conversation.buyer_id === user.id ? conversation.seller_id : conversation.buyer_id;
+    void sendPushToRecipient(recipientId, {
+      title: "Nouveau message",
+      body: content.slice(0, 100),
+      url: `/messages/${conversationId}`,
+    });
 
     logInfo({
       event: "message_sent",

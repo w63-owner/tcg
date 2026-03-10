@@ -1,5 +1,7 @@
 "use client";
 
+import type { ImageMessageMetadata, SystemMessageMetadata } from "../types";
+import type { MutableRefObject } from "react";
 import {
   createContext,
   useCallback,
@@ -8,6 +10,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
+
+export type { ImageMessageMetadata, SystemMessageMetadata } from "../types";
 
 export type ThreadMessage = {
   id: string;
@@ -30,6 +34,7 @@ export type ThreadMessage = {
     buyer_id: string;
     listing_id: string;
   }> | null;
+  metadata?: SystemMessageMetadata | ImageMessageMetadata;
 };
 
 type MessagesConversationContextValue = {
@@ -38,9 +43,18 @@ type MessagesConversationContextValue = {
   addOptimisticMessage: (msg: Omit<ThreadMessage, "id"> & { id: string }) => void;
   removeOptimisticMessage: (tempId: string) => void;
   markOptimisticFailed: (tempId: string) => void;
+  updateMessageReadAt: (messageId: string, readAt: string | null) => void;
+  retrySendRef: MutableRefObject<((content: string) => Promise<void>) | null>;
+  prependMessages: (olderMessages: ThreadMessage[]) => void;
+  setHasMore: (hasMore: boolean) => void;
+  hasMore: boolean;
+  isLoadingOlder: boolean;
+  setIsLoadingOlder: (loading: boolean) => void;
   fetchOfferDetails: (offerId: string) => Promise<void>;
   isCounterpartTyping: boolean;
   setIsCounterpartTyping: (typing: boolean) => void;
+  headerVisible: boolean;
+  setHeaderVisible: (visible: boolean) => void;
 };
 
 const MessagesConversationContext =
@@ -88,6 +102,21 @@ export function normalizeRealtimeMessage(payload: Record<string, unknown>): Thre
     }
   }
 
+  let metadata: SystemMessageMetadata | ImageMessageMetadata | undefined = undefined;
+  if (payload.metadata != null && typeof payload.metadata === "object") {
+    const m = payload.metadata as Record<string, unknown>;
+    if (m.type && typeof m.type === "string") {
+      metadata = {
+        type: m.type as "offer_accepted" | "payment_completed" | "order_shipped" | "sale_completed",
+        offer_amount: typeof m.offer_amount === "number" ? m.offer_amount : undefined,
+        total_amount: typeof m.total_amount === "number" ? m.total_amount : undefined,
+        seller_credit: typeof m.seller_credit === "number" ? m.seller_credit : undefined,
+      };
+    } else if (m.image_url && typeof m.image_url === "string") {
+      metadata = { image_url: m.image_url };
+    }
+  }
+
   return {
     id: String(payload.id ?? ""),
     sender_id: String(payload.sender_id ?? ""),
@@ -97,6 +126,7 @@ export function normalizeRealtimeMessage(payload: Record<string, unknown>): Thre
     message_type: messageType,
     offer_id: offerId,
     offer: offer ?? undefined,
+    metadata,
   };
 }
 
@@ -104,6 +134,7 @@ type MessagesConversationProviderProps = {
   initialMessages: ThreadMessage[];
   conversationId: string;
   currentUserId: string;
+  initialHasMore?: boolean;
   children: ReactNode;
 };
 
@@ -111,11 +142,21 @@ export function MessagesConversationProvider({
   initialMessages,
   conversationId,
   currentUserId,
+  initialHasMore = true,
   children,
 }: MessagesConversationProviderProps) {
   const [messages, setMessages] = useState<ThreadMessage[]>(initialMessages);
+  const [hasMore, setHasMore] = useState(initialHasMore);
+  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [isCounterpartTyping, setIsCounterpartTyping] = useState(false);
+  const [headerVisible, setHeaderVisible] = useState(true);
   const lastOptimisticIdRef = useRef<string | null>(null);
+  const retrySendRef = useRef<((content: string) => Promise<void>) | null>(null);
+
+  const prependMessages = useCallback((olderMessages: ThreadMessage[]) => {
+    setMessages((prev) => [...olderMessages, ...prev]);
+  }, []);
+
 
   const addMessage = useCallback(
     (newMsg: ThreadMessage) => {
@@ -129,7 +170,10 @@ export function MessagesConversationProvider({
           lastOptimisticIdRef.current = null;
           return prev.map((m) => (m.id === optimisticId ? newMsg : m));
         }
-        if (prev.some((m) => m.id === newMsg.id)) return prev;
+        const existingIdx = prev.findIndex((m) => m.id === newMsg.id);
+        if (existingIdx >= 0) {
+          return prev.map((m) => (m.id === newMsg.id ? newMsg : m));
+        }
         return [...prev, newMsg];
       });
       if (
@@ -175,6 +219,12 @@ export function MessagesConversationProvider({
     setMessages((prev) => prev.filter((m) => m.id !== tempId));
   }, []);
 
+  const updateMessageReadAt = useCallback((messageId: string, readAt: string | null) => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === messageId ? { ...m, read_at: readAt } : m)),
+    );
+  }, []);
+
   const markOptimisticFailed = useCallback((tempId: string) => {
     lastOptimisticIdRef.current = null;
     setMessages((prev) =>
@@ -190,9 +240,18 @@ export function MessagesConversationProvider({
     addOptimisticMessage,
     removeOptimisticMessage,
     markOptimisticFailed,
+    updateMessageReadAt,
+    retrySendRef,
+    prependMessages,
+    setHasMore,
+    hasMore,
+    isLoadingOlder,
+    setIsLoadingOlder,
     fetchOfferDetails,
     isCounterpartTyping,
     setIsCounterpartTyping,
+    headerVisible,
+    setHeaderVisible,
   };
 
   return (

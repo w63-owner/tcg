@@ -148,15 +148,15 @@ export async function confirmReceiptAction(
       },
     );
     if (!rpcError && conversationId) {
-      const saleCompletedContent = JSON.stringify({
-        type: "sale_completed",
-        seller_credit: sellerCredit,
-      });
       await admin.from("messages").insert({
         conversation_id: conversationId,
         sender_id: tx.buyer_id,
+        content: "Vente terminée",
         message_type: "system",
-        content: saleCompletedContent,
+        metadata: {
+          type: "sale_completed",
+          seller_credit: sellerCredit,
+        },
       });
       revalidatePath("/messages");
       revalidatePath(`/messages/${conversationId}`);
