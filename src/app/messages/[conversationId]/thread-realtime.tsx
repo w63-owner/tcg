@@ -1,27 +1,74 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
   useMessagesConversation,
   normalizeRealtimeMessage,
+  type ThreadMessage,
 } from "./messages-conversation-state";
-import { markConversationReadSilentAction } from "@/app/messages/actions";
+import { fetchMessagesAfter } from "@/app/messages/actions";
+import type { FetchOlderMessagesRow } from "@/app/messages/actions";
 
 type ThreadRealtimeProps = {
   conversationId: string;
   currentUserId: string;
 };
 
+function normalizeMessageRow(row: FetchOlderMessagesRow): ThreadMessage {
+  const offer = row.offer;
+  const normalizedOffer = Array.isArray(offer) ? offer[0] ?? null : offer;
+  return {
+    id: row.id,
+    sender_id: row.sender_id,
+    content: row.content,
+    created_at: row.created_at,
+    read_at: row.read_at,
+    message_type: row.message_type,
+    offer_id: row.offer_id,
+    metadata: row.metadata as ThreadMessage["metadata"],
+    offer: normalizedOffer ?? undefined,
+  };
+}
+
 export function ThreadRealtime({
   conversationId,
   currentUserId,
 }: ThreadRealtimeProps) {
-  const { addMessage, updateMessageReadAt } = useMessagesConversation();
+  const {
+    addMessage,
+    updateMessageReadAt,
+    appendMessages,
+    messages,
+    setConnectionStatus,
+  } = useMessagesConversation();
   const addMessageRef = useRef(addMessage);
   addMessageRef.current = addMessage;
   const updateMessageReadAtRef = useRef(updateMessageReadAt);
   updateMessageReadAtRef.current = updateMessageReadAt;
+  const appendMessagesRef = useRef(appendMessages);
+  appendMessagesRef.current = appendMessages;
+  const currentUserIdRef = useRef(currentUserId);
+  currentUserIdRef.current = currentUserId;
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+
+  const refetchSinceLastMessage = useCallback(async () => {
+    const msgs = messagesRef.current;
+    if (msgs.length === 0) return;
+    const lastMsg = msgs[msgs.length - 1];
+    const lastCreatedAt = lastMsg?.created_at;
+    if (!lastCreatedAt) return;
+    const result = await fetchMessagesAfter(conversationId, lastCreatedAt);
+    if (result.ok && result.messages && result.messages.length > 0) {
+      appendMessagesRef.current(
+        result.messages.map(normalizeMessageRow),
+      );
+    }
+  }, [conversationId]);
+
+  const refetchRef = useRef(refetchSinceLastMessage);
+  refetchRef.current = refetchSinceLastMessage;
 
   useEffect(() => {
     const supabase = createClient();
@@ -40,11 +87,6 @@ export function ThreadRealtime({
           if (raw && typeof raw === "object") {
             const msg = normalizeRealtimeMessage(raw);
             addMessageRef.current(msg);
-            if (msg.sender_id !== currentUserId) {
-              const formData = new FormData();
-              formData.set("conversation_id", conversationId);
-              void markConversationReadSilentAction(formData);
-            }
           }
         },
       )
@@ -65,12 +107,18 @@ export function ThreadRealtime({
           }
         },
       )
-      .subscribe();
+      .subscribe((status) => {
+        setConnectionStatus(status);
+        if (status === "SUBSCRIBED") {
+          void refetchRef.current();
+        }
+      });
 
     return () => {
+      setConnectionStatus(null);
       void supabase.removeChannel(channel);
     };
-  }, [conversationId, currentUserId]);
+  }, [conversationId, setConnectionStatus]);
 
   return null;
 }

@@ -40,6 +40,7 @@ export type ThreadMessage = {
 type MessagesConversationContextValue = {
   messages: ThreadMessage[];
   addMessage: (msg: ThreadMessage) => void;
+  appendMessages: (msgs: ThreadMessage[]) => void;
   addOptimisticMessage: (msg: Omit<ThreadMessage, "id"> & { id: string }) => void;
   removeOptimisticMessage: (tempId: string) => void;
   markOptimisticFailed: (tempId: string) => void;
@@ -55,6 +56,8 @@ type MessagesConversationContextValue = {
   setIsCounterpartTyping: (typing: boolean) => void;
   headerVisible: boolean;
   setHeaderVisible: (visible: boolean) => void;
+  connectionStatus: "SUBSCRIBED" | "CLOSED" | "CHANNEL_ERROR" | "TIMED_OUT" | null;
+  setConnectionStatus: (status: MessagesConversationContextValue["connectionStatus"]) => void;
 };
 
 const MessagesConversationContext =
@@ -150,11 +153,22 @@ export function MessagesConversationProvider({
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [isCounterpartTyping, setIsCounterpartTyping] = useState(false);
   const [headerVisible, setHeaderVisible] = useState(true);
+  const [connectionStatus, setConnectionStatus] = useState<MessagesConversationContextValue["connectionStatus"]>(null);
   const lastOptimisticIdRef = useRef<string | null>(null);
   const retrySendRef = useRef<((content: string) => Promise<void>) | null>(null);
 
   const prependMessages = useCallback((olderMessages: ThreadMessage[]) => {
     setMessages((prev) => [...olderMessages, ...prev]);
+  }, []);
+
+  const appendMessages = useCallback((newerMessages: ThreadMessage[]) => {
+    if (newerMessages.length === 0) return;
+    setMessages((prev) => {
+      const existingIds = new Set(prev.map((m) => m.id));
+      const toAdd = newerMessages.filter((m) => !existingIds.has(m.id));
+      if (toAdd.length === 0) return prev;
+      return [...prev, ...toAdd];
+    });
   }, []);
 
 
@@ -237,6 +251,7 @@ export function MessagesConversationProvider({
   const value: MessagesConversationContextValue = {
     messages,
     addMessage,
+    appendMessages,
     addOptimisticMessage,
     removeOptimisticMessage,
     markOptimisticFailed,
@@ -252,6 +267,8 @@ export function MessagesConversationProvider({
     setIsCounterpartTyping,
     headerVisible,
     setHeaderVisible,
+    connectionStatus,
+    setConnectionStatus,
   };
 
   return (

@@ -8,5 +8,8 @@ export type SystemMessageMetadata = {
 
 /** Image message metadata (stored in metadata when message_type === 'image') */
 export type ImageMessageMetadata = {
-  image_url: string;
+  image_url?: string;
+  storage_path?: string;
+  uploading?: boolean;
+  preview_url?: string;
 };

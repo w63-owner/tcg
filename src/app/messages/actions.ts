@@ -283,6 +283,87 @@ export async function fetchOlderMessages(
   };
 }
 
+export type FetchMessagesAfterResult = {
+  ok: boolean;
+  messages?: FetchOlderMessagesRow[];
+  error?: string;
+};
+
+/**
+ * Récupère les messages créés après une date donnée.
+ * Utilisé lors du SUBSCRIBED Realtime pour éviter les pertes pendant une micro-coupure.
+ */
+export async function fetchMessagesAfter(
+  conversationId: string,
+  afterDate: string,
+): Promise<FetchMessagesAfterResult> {
+  if (!conversationId || !afterDate) {
+    return { ok: false, error: "Paramètres invalides." };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { ok: false, error: "Non connecté." };
+  }
+
+  const { data: conversation } = await supabase
+    .from("conversations")
+    .select("id")
+    .eq("id", conversationId)
+    .maybeSingle<{ id: string }>();
+
+  if (!conversation) {
+    return { ok: false, error: "Conversation introuvable." };
+  }
+
+  const { data: messages, error } = await supabase
+    .from("messages")
+    .select("id, sender_id, content, created_at, read_at, message_type, offer_id, metadata, offer:offers(id, offer_amount, status, buyer_id, listing_id)")
+    .eq("conversation_id", conversationId)
+    .gt("created_at", afterDate)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    logError({
+      event: "fetch_messages_after_failed",
+      message: error.message,
+      context: { conversationId },
+    });
+    return { ok: false, error: error.message };
+  }
+
+  const rows = (messages ?? []) as FetchOlderMessagesRow[];
+  return { ok: true, messages: rows };
+}
+
+/**
+ * Marque des messages spécifiques comme lus.
+ * Utilisé par les read receipts basés sur l'IntersectionObserver.
+ */
+export async function markMessagesAsReadAction(
+  conversationId: string,
+  messageIds: string[],
+): Promise<void> {
+  if (!conversationId || messageIds.length === 0) return;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+
+  await supabase
+    .from("messages")
+    .update({ read_at: new Date().toISOString() })
+    .eq("conversation_id", conversationId)
+    .in("id", messageIds)
+    .is("read_at", null)
+    .neq("sender_id", user.id);
+}
+
 export async function markConversationReadSilentAction(formData: FormData) {
   const conversationId = String(formData.get("conversation_id") ?? "").trim();
   if (!conversationId) return;
@@ -310,7 +391,7 @@ export type UploadMessageImageResult = {
     created_at: string;
     read_at: string | null;
     message_type: string;
-    metadata: { image_url: string };
+    metadata: { image_url: string; storage_path: string };
   };
   error?: string;
 };
@@ -377,7 +458,7 @@ export async function uploadMessageImageAction(
   const { data: urlData } = supabase.storage
     .from("message_attachments")
     .getPublicUrl(path);
-  const publicUrl = urlData.publicUrl;
+  const imageUrl = urlData.publicUrl;
 
   const { data: message, error: insertError } = await supabase
     .from("messages")
@@ -386,7 +467,7 @@ export async function uploadMessageImageAction(
       sender_id: user.id,
       content: "Image envoyée",
       message_type: "image",
-      metadata: { image_url: publicUrl },
+      metadata: { image_url: imageUrl, storage_path: path },
     })
     .select("id, sender_id, content, created_at, read_at, message_type, metadata")
     .single<{
@@ -437,7 +518,7 @@ export async function uploadMessageImageAction(
       created_at: message.created_at,
       read_at: message.read_at,
       message_type: message.message_type,
-      metadata: { image_url: publicUrl },
+      metadata: { image_url: imageUrl, storage_path: path },
     },
   };
 }

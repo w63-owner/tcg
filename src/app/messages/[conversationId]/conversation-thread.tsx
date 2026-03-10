@@ -3,10 +3,10 @@
 import type { ImageMessageMetadata, SystemMessageMetadata } from "../types";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { Banknote, Check, CheckCircle2, CheckCheck, Package, Handshake, XCircle } from "lucide-react";
+import { Banknote, Check, CheckCircle2, CheckCheck, Loader2, Package, Handshake, XCircle } from "lucide-react";
 import { AcceptOfferForm } from "./accept-offer-form";
 import { useMessagesConversation } from "./messages-conversation-state";
-import { fetchOlderMessages } from "../actions";
+import { fetchOlderMessages, markMessagesAsReadAction } from "../actions";
 import type { ThreadMessage } from "./messages-conversation-state";
 
 type OfferData = {
@@ -25,6 +25,89 @@ type ConversationThreadProps = {
   conversationId: string;
   counterpartName?: string | null;
 };
+
+const READ_RECEIPT_BATCH_MS = 150;
+const TWO_MINUTES_MS = 2 * 60 * 1000;
+
+function useReadReceiptBatcher(conversationId: string) {
+  const { updateMessageReadAt } = useMessagesConversation();
+  const pendingRef = useRef<Set<string>>(new Set());
+  const flushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const markedRef = useRef<Set<string>>(new Set());
+
+  const flush = useCallback(() => {
+    if (flushTimeoutRef.current) {
+      clearTimeout(flushTimeoutRef.current);
+      flushTimeoutRef.current = null;
+    }
+    const ids = Array.from(pendingRef.current);
+    pendingRef.current.clear();
+    if (ids.length === 0) return;
+    const now = new Date().toISOString();
+    ids.forEach((id) => updateMessageReadAt(id, now));
+    void markMessagesAsReadAction(conversationId, ids);
+  }, [conversationId, updateMessageReadAt]);
+
+  const markAsReadWhenVisible = useCallback(
+    (messageId: string) => {
+      if (markedRef.current.has(messageId)) return;
+      markedRef.current.add(messageId);
+      pendingRef.current.add(messageId);
+      if (!flushTimeoutRef.current) {
+        flushTimeoutRef.current = setTimeout(flush, READ_RECEIPT_BATCH_MS);
+      }
+    },
+    [flush],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (flushTimeoutRef.current) clearTimeout(flushTimeoutRef.current);
+    };
+  }, []);
+
+  return markAsReadWhenVisible;
+}
+
+function UnreadMessageObserver({
+  messageId,
+  readAt,
+  senderId,
+  currentUserId,
+  onVisible,
+  children,
+}: {
+  messageId: string;
+  readAt: string | null;
+  senderId: string;
+  currentUserId: string;
+  onVisible: (id: string) => void;
+  children: ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const hasTriggered = useRef(false);
+
+  useEffect(() => {
+    if (readAt !== null || senderId === currentUserId) return;
+    const el = ref.current;
+    const viewport = el?.closest(".overflow-y-auto");
+    if (!el || !viewport) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (!entry?.isIntersecting || hasTriggered.current) return;
+        hasTriggered.current = true;
+        onVisible(messageId);
+      },
+      { root: viewport, rootMargin: "50px", threshold: 0.25 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [messageId, readAt, senderId, currentUserId, onVisible]);
+
+  return <div ref={ref}>{children}</div>;
+}
 
 function ReadReceiptIcon({ readAt }: { readAt: string | null }) {
   if (readAt) {
@@ -223,9 +306,11 @@ export function ConversationThread({
     hasMore,
     isLoadingOlder,
     setIsLoadingOlder,
+    connectionStatus,
   } = useMessagesConversation();
 
   const scrollHeightBeforePrependRef = useRef<number>(0);
+  const markAsReadWhenVisible = useReadReceiptBatcher(conversationId);
 
   const loadOlder = useCallback(async () => {
     if (messages.length === 0 || !hasMore || isLoadingOlder) return;
@@ -309,9 +394,22 @@ export function ConversationThread({
   const rows = useMemo(() => {
     return messages.map((message, index) => {
       const previous = messages[index - 1];
+      const next = messages[index + 1];
       const showDaySeparator =
         index === 0 || toDayKey(previous.created_at) !== toDayKey(message.created_at);
-      return { message, showDaySeparator };
+      const groupWithPrevious =
+        index > 0 &&
+        previous.sender_id === message.sender_id &&
+        message.message_type !== "system" &&
+        previous.message_type !== "system" &&
+        new Date(message.created_at).getTime() - new Date(previous.created_at).getTime() < TWO_MINUTES_MS;
+      const groupWithNext =
+        next != null &&
+        next.sender_id === message.sender_id &&
+        message.message_type !== "system" &&
+        next.message_type !== "system" &&
+        new Date(next.created_at).getTime() - new Date(message.created_at).getTime() < TWO_MINUTES_MS;
+      return { message, showDaySeparator, groupWithPrevious, groupWithNext };
     });
   }, [messages]);
 
@@ -323,22 +421,34 @@ export function ConversationThread({
     );
   }
 
+  const showConnectionBanner =
+    connectionStatus != null && connectionStatus !== "SUBSCRIBED";
+
   return (
-    <div ref={viewportRef} className="flex h-full flex-col gap-3 overflow-y-auto">
+    <div ref={viewportRef} className="flex h-full flex-col justify-end gap-3 overflow-y-auto">
       <div ref={topSentinelRef} className="h-1 shrink-0" aria-hidden />
+      {showConnectionBanner ? (
+        <div className="bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-200 flex items-center justify-center gap-2 px-3 py-2 text-xs">
+          <span className="size-2 animate-pulse rounded-full bg-amber-500" aria-hidden />
+          Reconnexion en cours...
+        </div>
+      ) : null}
       {isLoadingOlder ? (
         <div className="text-muted-foreground py-2 text-center text-xs">
           Chargement...
         </div>
       ) : null}
-      {rows.map(({ message, showDaySeparator }) => {
+      {rows.map(({ message, showDaySeparator, groupWithPrevious, groupWithNext }) => {
         const isMine = message.sender_id === currentUserId;
         const offer = message.message_type === "offer" ? pickOne(message.offer) : null;
         const isSeller = currentUserId === sellerId;
         const canAcceptOffer = offer && offer.status === "PENDING" && isSeller;
 
+        const bubbleSpacing = groupWithPrevious ? "mt-1" : "mt-2";
+        const showReadReceipt = isMine && !groupWithNext;
+
         return (
-          <div key={message.id} className="space-y-2">
+          <div key={message.id} className={`space-y-2 ${bubbleSpacing}`}>
             {showDaySeparator ? (
               <div className="flex items-center justify-center">
                 <span className="bg-muted text-muted-foreground rounded-full border px-2 py-0.5 text-[10px]">
@@ -364,7 +474,14 @@ export function ConversationThread({
               </div>
             ) : (
             <>
-              <div className={`flex ${isMine ? "justify-end" : "justify-start"}`}>
+              <UnreadMessageObserver
+                messageId={message.id}
+                readAt={message.read_at}
+                senderId={message.sender_id}
+                currentUserId={currentUserId}
+                onVisible={markAsReadWhenVisible}
+              >
+                <div className={`flex ${isMine ? "justify-end" : "justify-start"}`}>
                 {offer ? (
                   <div
                     className={`relative max-w-[85%] rounded-lg border px-3 py-2.5 text-sm ${
@@ -389,37 +506,73 @@ export function ConversationThread({
                       </div>
                     ) : null}
                       </div>
-                      {isMine ? (
+                      {showReadReceipt ? (
                         <ReadReceiptIcon readAt={message.read_at} />
                       ) : null}
                     </div>
                   </div>
-                ) : message.message_type === "image" &&
-                  message.metadata &&
-                  "image_url" in message.metadata &&
-                  typeof (message.metadata as ImageMessageMetadata).image_url === "string" ? (
-                  <div
-                    className={`flex max-w-[85%] items-end justify-end gap-1.5 rounded-lg border px-3 py-2.5 text-sm ${
-                      isMine ? "bg-primary/10" : "bg-muted/40"
-                    }`}
-                  >
-                    <a
-                      href={(message.metadata as ImageMessageMetadata).image_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block overflow-hidden rounded-md"
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={(message.metadata as ImageMessageMetadata).image_url}
-                        alt="Image envoyée"
-                        className="max-h-[280px] max-w-[250px] rounded-md object-contain"
-                      />
-                    </a>
-                    {isMine ? (
-                      <ReadReceiptIcon readAt={message.read_at} />
-                    ) : null}
-                  </div>
+                ) : message.message_type === "image" ? (
+                  (() => {
+                    const imgMeta = message.metadata as ImageMessageMetadata | undefined;
+                    const isUploading = imgMeta?.uploading === true;
+                    const imageUrl = imgMeta?.image_url;
+                    const previewUrl = imgMeta?.preview_url;
+                    if (isUploading && previewUrl) {
+                      return (
+                        <div
+                          className={`flex max-w-[85%] items-end justify-end gap-1.5 rounded-lg border border-dashed px-3 py-2.5 text-sm ${
+                            isMine ? "bg-primary/5" : "bg-muted/30"
+                          }`}
+                        >
+                          <div className="relative">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={previewUrl}
+                              alt="Envoi en cours..."
+                              className="max-h-[140px] max-w-[125px] rounded-md object-cover opacity-60 blur-[2px]"
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <Loader2 className="text-muted-foreground size-6 animate-spin" aria-label="Envoi en cours" />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+                    if (imageUrl) {
+                      const storagePath = imgMeta?.storage_path ?? (() => {
+                        const m = imageUrl.match(/message_attachments\/(.+)$/);
+                        return m?.[1] ?? null;
+                      })();
+                      const imgSrc = storagePath
+                        ? `/api/messages/image?conversationId=${encodeURIComponent(conversationId)}&path=${encodeURIComponent(storagePath)}`
+                        : imageUrl;
+                      return (
+                        <div
+                          className={`flex max-w-[85%] items-end justify-end gap-1.5 rounded-lg border px-3 py-2.5 text-sm ${
+                            isMine ? "bg-primary/10" : "bg-muted/40"
+                          }`}
+                        >
+                          <a
+                            href={imgSrc}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block overflow-hidden rounded-md"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={imgSrc}
+                              alt="Image envoyée"
+                              className="max-h-[280px] max-w-[250px] rounded-md object-contain"
+                            />
+                          </a>
+                          {showReadReceipt ? (
+                            <ReadReceiptIcon readAt={message.read_at} />
+                          ) : null}
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()
                 ) : message.message_type === "offer" ? (
                   <div
                     className={`flex max-w-[85%] items-end justify-end gap-1.5 rounded-lg border px-3 py-2.5 text-sm ${
@@ -431,7 +584,7 @@ export function ConversationThread({
                         ? message.content
                         : "Nouvelle offre reçue"}
                     </p>
-                    {isMine ? (
+                    {showReadReceipt ? (
                       <ReadReceiptIcon readAt={message.read_at} />
                     ) : null}
                   </div>
@@ -460,12 +613,13 @@ export function ConversationThread({
                       </button>
                     )}
                     </div>
-                    {isMine ? (
+                    {showReadReceipt ? (
                       <ReadReceiptIcon readAt={message.read_at} />
                     ) : null}
                   </div>
                 )}
-              </div>
+                </div>
+              </UnreadMessageObserver>
               {offer && (offer.status === "ACCEPTED" || offer.status === "REJECTED") ? (
                 <div className="flex justify-center">
                   <div className={`flex flex-col items-center gap-1.5 ${SYSTEM_MSG_CLASS}`}>

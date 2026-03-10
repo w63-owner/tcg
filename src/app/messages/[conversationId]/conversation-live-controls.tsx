@@ -187,8 +187,20 @@ export function ConversationLiveControls({
   const onImageSelect = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
-      if (!file || isUploadingImage || isSending) return;
+      if (!file || isSending) return;
       event.target.value = "";
+
+      const tempId = crypto.randomUUID();
+      const objectUrl = URL.createObjectURL(file);
+      addOptimisticMessage({
+        id: tempId,
+        sender_id: currentUserId,
+        content: "Image envoyée",
+        created_at: new Date().toISOString(),
+        read_at: null,
+        message_type: "image",
+        metadata: { uploading: true, preview_url: objectUrl },
+      });
 
       setIsUploadingImage(true);
       try {
@@ -207,15 +219,25 @@ export function ConversationLiveControls({
             metadata: result.message.metadata,
           });
         } else {
+          markOptimisticFailed(tempId);
           toast.error(result.error ?? "Impossible d'envoyer l'image.");
         }
       } catch {
+        markOptimisticFailed(tempId);
         toast.error("Erreur lors de l'envoi de l'image.");
       } finally {
         setIsUploadingImage(false);
+        URL.revokeObjectURL(objectUrl);
       }
     },
-    [addMessage, conversationId, currentUserId, isSending, isUploadingImage],
+    [
+      addMessage,
+      addOptimisticMessage,
+      conversationId,
+      currentUserId,
+      isSending,
+      markOptimisticFailed,
+    ],
   );
 
   return (

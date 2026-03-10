@@ -95,13 +95,6 @@ export default async function MessagesThreadPage({
     notFound();
   }
 
-  await supabase
-    .from("messages")
-    .update({ read_at: new Date().toISOString() })
-    .eq("conversation_id", conversation.id)
-    .is("read_at", null)
-    .neq("sender_id", user.id);
-
   const { data: messages } = await supabase
     .from("messages")
     .select("id, sender_id, content, created_at, read_at, message_type, offer_id, metadata, offer:offers(id, offer_amount, status, buyer_id, listing_id)")
