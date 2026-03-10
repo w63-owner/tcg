@@ -5,10 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireAuthenticatedUser } from "@/lib/auth/require-authenticated-user";
 import { logError, logInfo } from "@/lib/observability";
-import {
-  calculateDisplayPrice,
-  calculateFeeAmount,
-} from "@/lib/pricing";
+import { calculateFeeAmount } from "@/lib/pricing";
 import { resolveShippingCost } from "@/lib/shipping/calculate-cost";
 import { createStripeCheckoutSession } from "@/lib/stripe/checkout";
 import type { OfferActionState } from "./offer-action-state";
@@ -71,8 +68,15 @@ export async function startCheckoutAction(formData: FormData) {
     weightClass: listing.delivery_weight_class,
   });
 
-  const displayPrice =
-    listing.display_price ?? calculateDisplayPrice(Number(listing.price_seller));
+  if (listing.display_price == null) {
+    logError({
+      event: "listing_checkout_display_price_missing",
+      message: "listing.display_price is null",
+      context: { listingId, userId: user.id },
+    });
+    redirect(`/listing/${listingId}?error=invalid_listing_price`);
+  }
+  const displayPrice = listing.display_price;
   const feeAmount = calculateFeeAmount(displayPrice, Number(listing.price_seller));
   const totalAmount = Math.round((displayPrice + shippingCost) * 100) / 100;
 

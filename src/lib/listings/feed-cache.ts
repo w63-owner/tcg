@@ -3,6 +3,7 @@ import { createPublicServerClient } from "@/lib/supabase/public-server";
 import {
   fetchListingsFeedPage,
   fetchSetOptions,
+  type FeedCursor,
   type FeedFilters,
 } from "@/lib/listings/feed";
 
@@ -16,16 +17,20 @@ const fetchPublicSetOptionsCached = unstable_cache(
 );
 
 const fetchPublicFeedCached = unstable_cache(
-  async (filters: FeedFilters, page: number, pageSize: number) => {
+  async (
+    filters: FeedFilters,
+    cursor: FeedCursor | null,
+    pageSize: number,
+  ) => {
     const supabase = createPublicServerClient();
     return fetchListingsFeedPage({
       supabase,
       filters,
-      page,
+      cursor,
       pageSize,
     });
   },
-  ["public-feed-v2"],
+  ["public-feed-v3"],
   { revalidate: 20 },
 );
 
@@ -35,7 +40,7 @@ export function getPublicSetOptionsCached() {
 
 export function getPublicFeedCached(params: {
   filters: FeedFilters;
-  page: number;
+  cursor?: FeedCursor | null;
   pageSize: number;
   /** When set, excludes this user's listings from the feed (no cache). */
   excludeSellerId?: string;
@@ -45,10 +50,14 @@ export function getPublicFeedCached(params: {
     return fetchListingsFeedPage({
       supabase,
       filters: params.filters,
-      page: params.page,
+      cursor: params.cursor,
       pageSize: params.pageSize,
       excludeSellerId: params.excludeSellerId,
     });
   }
-  return fetchPublicFeedCached(params.filters, params.page, params.pageSize);
+  return fetchPublicFeedCached(
+    params.filters,
+    params.cursor ?? null,
+    params.pageSize,
+  );
 }

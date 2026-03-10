@@ -181,7 +181,7 @@ create table if not exists public.transactions (
   stripe_checkout_session_id text unique,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  expiration_date timestamptz not null default (now() + interval '24 hours'),
+  expiration_date timestamptz not null default (now() + interval '30 minutes'),
   check (buyer_id <> seller_id)
 );
 
@@ -265,8 +265,8 @@ create policy shipping_matrix_read_all on public.shipping_matrix for select to a
 
 drop policy if exists transactions_read_participants on public.transactions;
 create policy transactions_read_participants on public.transactions for select to authenticated using (buyer_id = auth.uid() or seller_id = auth.uid());
+-- No INSERT policy: transactions may only be created via create_pending_transaction_and_lock_listing (SECURITY DEFINER).
 drop policy if exists transactions_insert_buyer on public.transactions;
-create policy transactions_insert_buyer on public.transactions for insert to authenticated with check (buyer_id = auth.uid() and buyer_id <> seller_id);
 
 drop policy if exists offers_read_buyer on public.offers;
 create policy offers_read_buyer on public.offers for select to authenticated using (buyer_id = auth.uid());
@@ -295,4 +295,4 @@ grant select, insert, update, delete on public.profiles to authenticated;
 grant select, insert on public.wallets to authenticated;
 grant select, insert, update, delete on public.listings to authenticated;
 grant select, insert, update on public.offers to authenticated;
-grant select, insert on public.transactions to authenticated;
+grant select on public.transactions to authenticated;

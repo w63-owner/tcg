@@ -2,7 +2,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
 import { FavoriteListingToggle } from "./favorite-listing-toggle";
-import { calculateDisplayPrice } from "@/lib/pricing";
 import { formatConditionLabel } from "@/lib/listings/condition-label";
 
 type CardItemProps = {
@@ -39,9 +38,9 @@ export function CardItem({
   initialFavorite = false,
 }: CardItemProps) {
   const finalDisplayPrice =
-    typeof displayPrice === "number"
+    typeof displayPrice === "number" && Number.isFinite(displayPrice)
       ? displayPrice
-      : calculateDisplayPrice(priceSeller);
+      : null;
   const listingHref = href ?? `/listing/${id}`;
   const gradeBadge = isGraded
     ? `${String(gradingCompany ?? "Graded").toUpperCase()}${gradeNote ? ` ${gradeNote}` : ""}`
@@ -86,7 +85,9 @@ export function CardItem({
         </div>
         <div className="flex items-center justify-between gap-2 border-t pt-1.5">
           <p className="text-sm font-normal tracking-tight">
-            {finalDisplayPrice.toFixed(2)} €
+            {finalDisplayPrice != null
+              ? `${finalDisplayPrice.toFixed(2)} €`
+              : "—"}
           </p>
           <div className="flex items-center gap-1.5">
             {showFavoriteToggle ? (

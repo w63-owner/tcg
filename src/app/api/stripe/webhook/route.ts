@@ -108,6 +108,29 @@ export async function POST(request: Request) {
     );
   }
 
+  const isPaymentOrCancellationEvent =
+    event.type === "checkout.session.completed" ||
+    event.type === "checkout.session.async_payment_succeeded" ||
+    event.type === "checkout.session.expired" ||
+    event.type === "checkout.session.async_payment_failed";
+
+  if (isPaymentOrCancellationEvent) {
+    const admin = createAdminClient();
+    const { data: existing } = await admin
+      .from("stripe_webhooks_processed")
+      .select("stripe_event_id")
+      .eq("stripe_event_id", event.id)
+      .maybeSingle();
+
+    if (existing) {
+      logInfo({
+        event: "stripe_webhook_idempotent_skip",
+        context: { eventId: event.id, eventType: event.type },
+      });
+      return NextResponse.json({ received: true });
+    }
+  }
+
   try {
     if (
       event.type === "checkout.session.completed" ||
@@ -139,6 +162,16 @@ export async function POST(request: Request) {
       if (transactionId) {
         await markCancelled(transactionId, session.id);
       }
+    }
+
+    if (isPaymentOrCancellationEvent) {
+      const admin = createAdminClient();
+      await admin
+        .from("stripe_webhooks_processed")
+        .upsert(
+          { stripe_event_id: event.id, event_type: event.type },
+          { onConflict: "stripe_event_id", ignoreDuplicates: true },
+        );
     }
 
     logInfo({

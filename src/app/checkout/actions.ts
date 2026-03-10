@@ -4,10 +4,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireAuthenticatedUser } from "@/lib/auth/require-authenticated-user";
 import { logError, logInfo } from "@/lib/observability";
-import {
-  calculateDisplayPrice,
-  calculateFeeAmount,
-} from "@/lib/pricing";
+import { calculateFeeAmount } from "@/lib/pricing";
 import { resolveShippingCostByCountry } from "@/lib/shipping/calculate-cost";
 import { createStripeCheckoutSession } from "@/lib/stripe/checkout";
 
@@ -114,8 +111,15 @@ export async function createCheckoutSession(
     weightClass: listing.delivery_weight_class,
   });
 
-  const displayPrice =
-    listing.display_price ?? calculateDisplayPrice(Number(listing.price_seller));
+  if (listing.display_price == null) {
+    logError({
+      event: "checkout_display_price_missing",
+      message: "listing.display_price is null",
+      context: { listingId: listingIdTrimmed, userId: user.id },
+    });
+    return { error: "Données de prix invalides. Réessaie." };
+  }
+  const displayPrice = listing.display_price;
   const feeAmount = calculateFeeAmount(displayPrice, Number(listing.price_seller));
   const totalAmount = Math.round((displayPrice + shippingCost) * 100) / 100;
 
@@ -167,10 +171,32 @@ export async function createCheckoutSession(
       return { error: "Impossible d'ouvrir la session de paiement." };
     }
 
-    await supabase.rpc("attach_checkout_session_to_transaction", {
-      p_transaction_id: transactionId,
-      p_session_id: session.id,
-    });
+    const { error: attachError } = await supabase.rpc(
+      "attach_checkout_session_to_transaction",
+      {
+        p_transaction_id: transactionId,
+        p_session_id: session.id,
+      },
+    );
+    if (attachError) {
+      await supabase.rpc("cancel_pending_transaction_and_unlock_listing", {
+        p_transaction_id: transactionId,
+      });
+      logError({
+        event: "checkout_attach_session_failed",
+        message: attachError.message,
+        context: {
+          listingId: listingIdTrimmed,
+          transactionId,
+          sessionId: session.id,
+          userId: user.id,
+        },
+      });
+      return {
+        error:
+          "La réservation n'a pas pu être enregistrée. L'annonce est à nouveau disponible. Réessaie.",
+      };
+    }
     logInfo({
       event: "checkout_session_created",
       context: {

@@ -9,7 +9,7 @@ import { InfiniteListingsFeed } from "@/components/marketplace/infinite-listings
 import { PullToRefresh } from "@/components/marketplace/pull-to-refresh";
 import { HomeAttributeFilters } from "@/components/marketplace/home-attribute-filters";
 import { MobileStickyHomeFilters } from "@/components/marketplace/mobile-sticky-home-filters";
-import { parseFeedFilters } from "@/lib/listings/feed";
+import { encodeFeedCursor, parseFeedFilters } from "@/lib/listings/feed";
 import { getPublicFeedCached, getPublicSetOptionsCached } from "@/lib/listings/feed-cache";
 
 type HomeProps = {
@@ -62,7 +62,6 @@ export default async function Home({ searchParams }: HomeProps) {
     getPublicSetOptionsCached(),
     getPublicFeedCached({
       filters,
-      page: 1,
       pageSize,
       excludeSellerId: user?.id,
     }),
@@ -70,6 +69,8 @@ export default async function Home({ searchParams }: HomeProps) {
 
   const listings = feedResult.listings;
   const hasNextPage = feedResult.hasNextPage;
+  const initialNextCursor =
+    feedResult.nextCursor != null ? encodeFeedCursor(feedResult.nextCursor) : null;
   const error = feedResult.error ? { message: feedResult.error } : null;
   const listingIds = listings.map((listing) => listing.id);
   const favoriteListingIds = new Set<string>();
@@ -215,6 +216,7 @@ export default async function Home({ searchParams }: HomeProps) {
             .filter((listing) => favoriteListingIds.has(listing.id))
             .map((listing) => listing.id)}
           initialHasNextPage={hasNextPage}
+          initialNextCursor={initialNextCursor}
           filters={{
             q: query || undefined,
             set: setFilter || undefined,

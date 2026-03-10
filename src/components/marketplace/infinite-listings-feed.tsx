@@ -9,6 +9,8 @@ type InfiniteListingsFeedProps = {
   initialListings: ListingFeedRow[];
   initialFavoriteListingIds: string[];
   initialHasNextPage: boolean;
+  /** Opaque cursor for the next page (from previous response). */
+  initialNextCursor: string | null;
   filters: Record<string, string | undefined>;
   showFavoriteToggle: boolean;
   fromHref: string;
@@ -16,6 +18,7 @@ type InfiniteListingsFeedProps = {
 
 type FeedApiResponse = {
   listings: ListingFeedRow[];
+  nextCursor: string | null;
   hasNextPage: boolean;
   favoriteListingIds: string[];
   error?: string;
@@ -43,6 +46,7 @@ export function InfiniteListingsFeed({
   initialListings,
   initialFavoriteListingIds,
   initialHasNextPage,
+  initialNextCursor,
   filters,
   showFavoriteToggle,
   fromHref,
@@ -61,7 +65,7 @@ export function InfiniteListingsFeed({
   const [items, setItems] = useState<ListingItem[]>(
     toListingItems(initialListings, initialFavoriteListingIds),
   );
-  const [page, setPage] = useState(1);
+  const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor);
   const [hasNextPage, setHasNextPage] = useState(initialHasNextPage);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -74,13 +78,13 @@ export function InfiniteListingsFeed({
       const raw = window.sessionStorage.getItem(cacheKey);
       if (!raw) {
         setItems(toListingItems(initialListings, initialFavoriteListingIds));
-        setPage(1);
+        setNextCursor(initialNextCursor);
         setHasNextPage(initialHasNextPage);
         return;
       }
       const parsed = JSON.parse(raw) as {
         items?: ListingItem[];
-        page?: number;
+        nextCursor?: string | null;
         hasNextPage?: boolean;
         timestamp?: number;
       };
@@ -88,30 +92,30 @@ export function InfiniteListingsFeed({
         throw new Error("Cache expiré");
       if (!Array.isArray(parsed.items) || parsed.items.length === 0) {
         setItems(toListingItems(initialListings, initialFavoriteListingIds));
-        setPage(1);
+        setNextCursor(initialNextCursor);
         setHasNextPage(initialHasNextPage);
         return;
       }
       setItems(parsed.items);
-      setPage(Math.max(1, Number(parsed.page ?? 1) || 1));
+      setNextCursor(parsed.nextCursor ?? null);
       setHasNextPage(Boolean(parsed.hasNextPage));
     } catch {
       setItems(toListingItems(initialListings, initialFavoriteListingIds));
-      setPage(1);
+      setNextCursor(initialNextCursor);
       setHasNextPage(initialHasNextPage);
     }
-  }, [cacheKey, initialHasNextPage, initialFavoriteListingIds, initialListings]);
+  }, [cacheKey, initialHasNextPage, initialNextCursor, initialFavoriteListingIds, initialListings]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     const payload = JSON.stringify({
       items,
-      page,
+      nextCursor,
       hasNextPage,
       timestamp: Date.now(),
     });
     window.sessionStorage.setItem(cacheKey, payload);
-  }, [cacheKey, hasNextPage, items, page]);
+  }, [cacheKey, hasNextPage, items, nextCursor]);
 
   const loadMore = useCallback(async () => {
     if (!hasNextPage || isLoadingMore || inFlightRef.current) return;
@@ -119,9 +123,10 @@ export function InfiniteListingsFeed({
     setIsLoadingMore(true);
     setLoadError(null);
     try {
-      const nextPage = page + 1;
-      const qs = queryString ? `${queryString}&page=${nextPage}` : `page=${nextPage}`;
-      const response = await fetch(`/api/listings/feed?${qs}`);
+      const params = new URLSearchParams(queryString);
+      params.set("pageSize", "40");
+      if (nextCursor) params.set("cursor", nextCursor);
+      const response = await fetch(`/api/listings/feed?${params.toString()}`);
       const json = (await response.json()) as FeedApiResponse;
       if (!response.ok || json.error) {
         setLoadError(json.error ?? "Impossible de charger plus d'annonces.");
@@ -137,7 +142,7 @@ export function InfiniteListingsFeed({
           new Map([...previous, ...nextItems].map((item) => [item.id, item])).values(),
         ),
       );
-      setPage(nextPage);
+      setNextCursor(json.nextCursor ?? null);
       setHasNextPage(Boolean(json.hasNextPage));
     } catch {
       setLoadError("Erreur reseau lors du chargement.");
@@ -145,7 +150,7 @@ export function InfiniteListingsFeed({
       inFlightRef.current = false;
       setIsLoadingMore(false);
     }
-  }, [hasNextPage, isLoadingMore, page, queryString]);
+  }, [hasNextPage, isLoadingMore, nextCursor, queryString]);
 
   useEffect(() => {
     const target = sentinelRef.current;
