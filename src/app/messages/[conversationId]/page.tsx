@@ -211,7 +211,7 @@ export default async function MessagesThreadPage({
   const showReceiptConfirmBar = Boolean(isBuyer && shippedTransaction);
 
   return (
-    <section className="flex flex-col h-[calc(100dvh-8.25rem)] md:h-[calc(100dvh-3.75rem)] overflow-hidden">
+    <section className="fixed inset-x-0 bottom-0 top-14 md:top-16 flex flex-col overflow-hidden">
       <MessagesConversationProvider
         key={conversation.id}
         initialMessages={rows}
@@ -219,10 +219,10 @@ export default async function MessagesThreadPage({
         currentUserId={user.id}
         initialHasMore={rows.length >= 50}
       >
-        <div className="flex flex-col h-full min-h-0 overflow-hidden">
+        <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
           <ThreadRealtime conversationId={conversation.id} currentUserId={user.id} />
 
-          <div className="shrink-0">
+          <div className="shrink-0 z-10">
             <ConversationHeader
               conversationId={conversation.id}
               counterpart={counterpart ?? null}
@@ -230,20 +230,20 @@ export default async function MessagesThreadPage({
             />
           </div>
 
-      <div className="flex-1 min-h-0 flex flex-col overflow-hidden relative">
-        <div className="flex-1 min-h-0 pt-3 flex flex-col overflow-hidden">
-          <ConversationThreadConnected
-            conversationId={conversation.id}
-            currentUserId={user.id}
-            sellerId={conversation.seller_id}
-            buyerUsername={pickOne(conversation.buyer)?.username ?? null}
-            counterpartName={counterpart ?? null}
-          />
-        </div>
-      </div>
+          <div className="flex-1 overflow-hidden relative min-h-0">
+            <div className="absolute inset-0 pt-3">
+              <ConversationThreadConnected
+                conversationId={conversation.id}
+                currentUserId={user.id}
+                sellerId={conversation.seller_id}
+                buyerUsername={pickOne(conversation.buyer)?.username ?? null}
+                counterpartName={counterpart ?? null}
+              />
+            </div>
+          </div>
 
       {/* Barre fixe en bas : boutons d’action puis zone de texte tout en bas de l’écran */}
-      <div className="fixed inset-x-0 bottom-0 z-40 flex flex-col bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-t">
+      <div className="shrink-0 flex flex-col bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-t">
         <div className="mx-auto flex w-full max-w-7xl flex-col px-4 md:px-6">
           {showShippingButton ? (
             <div className="py-2">
@@ -285,16 +285,16 @@ export default async function MessagesThreadPage({
             </div>
           ) : null}
           {/* Zone de saisie tout en bas de l’écran */}
-          <div className="p-3 pb-[max(0.75rem,var(--safe-area-bottom))] md:p-4">
+          <div className="p-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] md:p-4">
             <ConversationLiveControls
               conversationId={conversation.id}
               currentUserId={user.id}
               counterpartUserId={counterpartUserId}
               counterpartName={counterpart ?? "Utilisateur"}
             />
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
         </div>
       </MessagesConversationProvider>
     </section>

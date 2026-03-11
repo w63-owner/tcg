@@ -443,7 +443,7 @@ export function ConversationThread({
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div
         ref={viewportRef}
-        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-auto pb-2 pb-[max(0.5rem,10rem)] md:pb-[max(1rem,11rem)]"
+        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-auto pb-2"
       >
         <div className="flex min-h-full flex-col justify-end gap-3">
       <div ref={topSentinelRef} className="h-1 shrink-0" aria-hidden />
