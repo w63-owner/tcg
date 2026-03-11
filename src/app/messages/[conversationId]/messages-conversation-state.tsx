@@ -52,6 +52,7 @@ type MessagesConversationContextValue = {
   isLoadingOlder: boolean;
   setIsLoadingOlder: (loading: boolean) => void;
   fetchOfferDetails: (offerId: string) => Promise<void>;
+  updateOfferStatus: (offerId: string, status: "ACCEPTED" | "REJECTED") => void;
   isCounterpartTyping: boolean;
   setIsCounterpartTyping: (typing: boolean) => void;
   headerVisible: boolean;
@@ -111,7 +112,7 @@ export function normalizeRealtimeMessage(payload: Record<string, unknown>): Thre
     const m = payload.metadata as Record<string, unknown>;
     if (m.type && typeof m.type === "string") {
       metadata = {
-        type: m.type as "offer_accepted" | "payment_completed" | "order_shipped" | "sale_completed",
+        type: m.type as "offer_accepted" | "offer_cancelled_by_buyer" | "payment_completed" | "order_shipped" | "sale_completed",
         offer_amount: typeof m.offer_amount === "number" ? m.offer_amount : undefined,
         total_amount: typeof m.total_amount === "number" ? m.total_amount : undefined,
         seller_credit: typeof m.seller_credit === "number" ? m.seller_credit : undefined,
@@ -264,6 +265,24 @@ export function MessagesConversationProvider({
     );
   }, []);
 
+  const updateOfferStatus = useCallback(
+    (offerId: string, status: "ACCEPTED" | "REJECTED") => {
+      setMessages((prev) =>
+        prev.map((m) => {
+          const offer = m.offer;
+          if (!offer) return m;
+          const single =
+            Array.isArray(offer) ? offer[0] : (offer as OfferData);
+          if (!single || single.id !== offerId) return m;
+          const updated =
+            Array.isArray(offer) ? [{ ...single, status }] : { ...single, status };
+          return { ...m, offer: updated };
+        }),
+      );
+    },
+    [],
+  );
+
   const value: MessagesConversationContextValue = {
     messages,
     addMessage,
@@ -279,6 +298,7 @@ export function MessagesConversationProvider({
     isLoadingOlder,
     setIsLoadingOlder,
     fetchOfferDetails,
+    updateOfferStatus,
     isCounterpartTyping,
     setIsCounterpartTyping,
     headerVisible,

@@ -131,12 +131,70 @@ export async function cancelSentOfferAction(formData: FormData) {
     return;
   }
 
+  const { data: offer } = await supabase
+    .from("offers")
+    .select("id, listing_id, status, conversation_id, listing:listings!inner(seller_id)")
+    .eq("id", offerId)
+    .eq("buyer_id", user.id)
+    .in("status", ["PENDING", "ACCEPTED"])
+    .maybeSingle<{
+      id: string;
+      listing_id: string;
+      status: string;
+      conversation_id: string | null;
+      listing: { seller_id: string };
+    }>();
+
+  if (!offer) {
+    return;
+  }
+
   await supabase
     .from("offers")
     .update({ status: "CANCELLED" })
     .eq("id", offerId)
     .eq("buyer_id", user.id)
-    .eq("status", "PENDING");
+    .in("status", ["PENDING", "ACCEPTED"]);
+
+  if (offer.status === "ACCEPTED") {
+    await supabase
+      .from("listings")
+      .update({
+        status: "ACTIVE",
+        reserved_for: null,
+        reserved_price: null,
+      })
+      .eq("id", offer.listing_id)
+      .eq("status", "RESERVED");
+
+    let conversationId = offer.conversation_id;
+    if (!conversationId) {
+      const { data: conv } = await supabase
+        .from("conversations")
+        .select("id")
+        .eq("listing_id", offer.listing_id)
+        .eq("buyer_id", user.id)
+        .eq("seller_id", offer.listing.seller_id)
+        .maybeSingle<{ id: string }>();
+      conversationId = conv?.id ?? null;
+    }
+
+    if (conversationId) {
+      await supabase.from("messages").insert({
+        conversation_id: conversationId,
+        sender_id: user.id,
+        content: "Offre annulée par l'acheteur",
+        message_type: "system",
+        metadata: { type: "offer_cancelled_by_buyer" },
+      });
+    }
+
+    revalidatePath(`/listing/${offer.listing_id}`);
+    revalidatePath("/messages");
+    if (offer.conversation_id) {
+      revalidatePath(`/messages/${offer.conversation_id}`);
+    }
+  }
 
   revalidatePath("/offers");
 }

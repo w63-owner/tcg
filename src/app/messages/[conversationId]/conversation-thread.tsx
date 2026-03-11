@@ -192,6 +192,21 @@ function renderSystemMessage(
       </>
     );
   }
+  if (data.type === "offer_cancelled_by_buyer") {
+    return (
+      <>
+        <XCircle className="text-amber-600 dark:text-amber-400 size-5 shrink-0" />
+        <p className="font-semibold text-foreground">Offre annulée</p>
+        <p className="mt-0">
+          {isSeller ? (
+            <>L&apos;acheteur a annulé son offre. L&apos;annonce est de nouveau disponible.</>
+          ) : (
+            <>Vous avez annulé votre offre. Vous pouvez refaire une offre ou acheter au prix initial.</>
+          )}
+        </p>
+      </>
+    );
+  }
   if (data.type === "payment_completed" && typeof data.total_amount === "number") {
     const amount = formatEuro(data.total_amount);
     return (
@@ -425,7 +440,12 @@ export function ConversationThread({
     connectionStatus === "reconnecting" || connectionStatus === "disconnected";
 
   return (
-    <div ref={viewportRef} className="flex h-full flex-col justify-end gap-3 overflow-y-auto">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div
+        ref={viewportRef}
+        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-auto pb-2 pb-[max(0.5rem,10rem)] md:pb-[max(1rem,11rem)]"
+      >
+        <div className="flex min-h-full flex-col justify-end gap-3">
       <div ref={topSentinelRef} className="h-1 shrink-0" aria-hidden />
       {showConnectionBanner ? (
         <div className="bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-200 flex items-center justify-center gap-2 px-3 py-2 text-xs">
@@ -668,7 +688,9 @@ export function ConversationThread({
           </div>
         </div>
       ) : null}
-      <div ref={bottomRef} />
+      <div ref={bottomRef} className="h-6 shrink-0" aria-hidden />
+        </div>
+      </div>
     </div>
   );
 }

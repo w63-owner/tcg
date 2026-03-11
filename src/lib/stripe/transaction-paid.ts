@@ -76,9 +76,9 @@ export async function markPaid(
 
   const { error: listingError } = await admin
     .from("listings")
-    .update({ status: "SOLD" })
+    .update({ status: "SOLD", reserved_for: null, reserved_price: null })
     .eq("id", tx.listing_id)
-    .in("status", ["LOCKED", "ACTIVE"]);
+    .in("status", ["LOCKED", "ACTIVE", "RESERVED"]);
 
   if (listingError) {
     logError({
@@ -87,6 +87,20 @@ export async function markPaid(
       context: { transactionId, listingId: tx.listing_id, sessionId },
     });
     throw new Error(`Listing update failed: ${listingError.message}`);
+  }
+
+  const { error: expireOffersError } = await admin
+    .from("offers")
+    .update({ status: "EXPIRED" })
+    .eq("listing_id", tx.listing_id)
+    .in("status", ["PENDING", "ACCEPTED"]);
+
+  if (expireOffersError) {
+    logError({
+      event: "stripe_mark_paid_expire_offers_failed",
+      message: expireOffersError.message,
+      context: { transactionId, listingId: tx.listing_id, sessionId },
+    });
   }
 
   const sellerCredit = roundMoney(
