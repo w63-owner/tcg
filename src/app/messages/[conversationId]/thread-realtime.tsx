@@ -134,7 +134,6 @@ export function ThreadRealtime({
       });
 
     return () => {
-      setConnectionStatus("disconnected");
       void supabase.removeChannel(channel);
     };
   }, [conversationId, setConnectionStatus]);
