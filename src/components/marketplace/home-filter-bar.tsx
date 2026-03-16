@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +13,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useDebounce } from "@/hooks/use-debounce";
 import { formatConditionLabel } from "@/lib/listings/condition-label";
+
+const SEARCH_DEBOUNCE_MS = 400;
 
 type HomeFilterBarProps = {
   query: string;
@@ -41,16 +45,39 @@ function FilterFields({
   sort,
   setOptions,
 }: HomeFilterBarProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [queryInput, setQueryInput] = useState(query);
   const [setValue, setSetValue] = useState(setFilter);
   const [conditionValue, setConditionValue] = useState(condition);
   const [gradedValue, setGradedValue] = useState(isGraded);
   const [sortValue, setSortValue] = useState(sort || "date_desc");
 
+  useEffect(() => {
+    setQueryInput(query);
+  }, [query]);
+
+  const debouncedQuery = useDebounce(queryInput, SEARCH_DEBOUNCE_MS);
+
+  useEffect(() => {
+    if (debouncedQuery === query) return;
+    const next = new URLSearchParams(searchParams);
+    if (debouncedQuery.trim()) {
+      next.set("q", debouncedQuery);
+    } else {
+      next.delete("q");
+    }
+    const queryString = next.toString();
+    router.push(queryString ? `${pathname}?${queryString}` : pathname);
+  }, [debouncedQuery, query, pathname, router, searchParams]);
+
   return (
     <>
       <Input
         name="q"
-        defaultValue={query}
+        value={queryInput}
+        onChange={(e) => setQueryInput(e.target.value)}
         placeholder="Nom de la carte, numero (ex : Dracaufeu 4/102)"
         className="xl:col-span-2"
       />
@@ -165,7 +192,6 @@ export function HomeFilterBar(props: HomeFilterBarProps) {
           key={`${props.setFilter}|${props.condition}|${props.isGraded}|${props.sort}`}
           {...props}
         />
-        <input type="hidden" name="page" value="1" />
         <Button type="submit">Rechercher</Button>
       </form>
     </div>

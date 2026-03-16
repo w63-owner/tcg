@@ -24,6 +24,7 @@ type OfferRow = {
     status: string;
     display_price: number | null;
     delivery_weight_class: string;
+    reserved_for: string | null;
   }> | null;
 };
 
@@ -73,7 +74,7 @@ export default async function OffersPage({ searchParams }: OffersPageProps) {
   const { data } = await supabase
     .from("offers")
     .select(
-      "id, listing_id, buyer_id, offer_amount, status, created_at, expires_at, listing:listings(id, title, seller_id, status, display_price)",
+      "id, listing_id, buyer_id, offer_amount, status, created_at, expires_at, listing:listings(id, title, seller_id, status, display_price, reserved_for)",
     )
     .order("created_at", { ascending: false })
     .limit(200);
@@ -82,7 +83,10 @@ export default async function OffersPage({ searchParams }: OffersPageProps) {
   const receivedOffers = offers.filter((offer) => offer.listing?.[0]?.seller_id === user.id);
   const sentOffers = offers.filter((offer) => offer.buyer_id === user.id);
   const acceptedSentOffers = sentOffers.filter(
-    (offer) => offer.status === "ACCEPTED" && offer.listing?.[0]?.status === "ACTIVE",
+    (offer) =>
+      offer.status === "ACCEPTED" &&
+      offer.listing?.[0]?.status === "RESERVED" &&
+      offer.listing?.[0]?.reserved_for === user.id,
   );
   const pendingReceivedOffers = receivedOffers.filter((offer) => offer.status === "PENDING");
   const acceptedTotal = acceptedSentOffers.reduce(
@@ -207,13 +211,23 @@ export default async function OffersPage({ searchParams }: OffersPageProps) {
                       </Button>
                     </form>
                   ) : null}
-                  {offer.status === "ACCEPTED" && offer.listing?.[0]?.status === "ACTIVE" ? (
-                    <form action={startOfferCheckoutAction}>
-                      <input type="hidden" name="offer_id" value={offer.id} />
-                      <Button type="submit" size="sm">
-                        Payer cette offre
-                      </Button>
-                    </form>
+                  {offer.status === "ACCEPTED" &&
+                  offer.listing?.[0]?.status === "RESERVED" &&
+                  offer.listing?.[0]?.reserved_for === user.id ? (
+                    <div className="flex gap-2">
+                      <form action={startOfferCheckoutAction}>
+                        <input type="hidden" name="offer_id" value={offer.id} />
+                        <Button type="submit" size="sm">
+                          Payer cette offre
+                        </Button>
+                      </form>
+                      <form action={cancelSentOfferAction}>
+                        <input type="hidden" name="offer_id" value={offer.id} />
+                        <Button type="submit" size="sm" variant="outline">
+                          Annuler mon offre
+                        </Button>
+                      </form>
+                    </div>
                   ) : null}
                 </div>
               ))

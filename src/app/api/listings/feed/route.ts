@@ -1,14 +1,22 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { fetchListingsFeedPage, parseFeedFilters } from "@/lib/listings/feed";
+import {
+  decodeFeedCursor,
+  encodeFeedCursor,
+  fetchListingsFeedPage,
+  parseFeedFilters,
+} from "@/lib/listings/feed";
 import { getPublicFeedCached } from "@/lib/listings/feed-cache";
 import { logPerf, toServerTimingHeader } from "@/lib/perf/timing";
+
+const DEFAULT_PAGE_SIZE = 40;
 
 export async function GET(request: Request) {
   const startedAt = performance.now();
   const url = new URL(request.url);
-  const page = Math.max(1, Number(url.searchParams.get("page") ?? "1") || 1);
-  const pageSize = 40;
+  const cursorToken = url.searchParams.get("cursor") ?? undefined;
+  const cursor = decodeFeedCursor(cursorToken);
+  const pageSize = Math.min(50, Math.max(1, Number(url.searchParams.get("pageSize") ?? DEFAULT_PAGE_SIZE) || DEFAULT_PAGE_SIZE));
   const filters = parseFeedFilters({
     q: url.searchParams.get("q") ?? undefined,
     set: url.searchParams.get("set") ?? undefined,
@@ -34,13 +42,13 @@ export async function GET(request: Request) {
     ? await fetchListingsFeedPage({
         supabase,
         filters,
-        page,
+        cursor,
         pageSize,
         excludeSellerId: user.id,
       })
     : await getPublicFeedCached({
         filters,
-        page,
+        cursor,
         pageSize,
       });
   const feedMs = performance.now() - feedStart;
@@ -63,6 +71,7 @@ export async function GET(request: Request) {
 
   const response = NextResponse.json({
     listings: feed.listings,
+    nextCursor: feed.nextCursor ? encodeFeedCursor(feed.nextCursor) : null,
     hasNextPage: feed.hasNextPage,
     favoriteListingIds,
   });
@@ -76,7 +85,6 @@ export async function GET(request: Request) {
 
   logPerf("api.listings.feed.timings", timings, {
     hasUser: Boolean(user),
-    page,
     pageSize,
     listingsCount: feed.listings.length,
   });

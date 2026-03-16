@@ -40,6 +40,7 @@ export type ThreadMessage = {
 type MessagesConversationContextValue = {
   messages: ThreadMessage[];
   addMessage: (msg: ThreadMessage) => void;
+  appendMessages: (msgs: ThreadMessage[]) => void;
   addOptimisticMessage: (msg: Omit<ThreadMessage, "id"> & { id: string }) => void;
   removeOptimisticMessage: (tempId: string) => void;
   markOptimisticFailed: (tempId: string) => void;
@@ -51,10 +52,14 @@ type MessagesConversationContextValue = {
   isLoadingOlder: boolean;
   setIsLoadingOlder: (loading: boolean) => void;
   fetchOfferDetails: (offerId: string) => Promise<void>;
+  updateOfferStatus: (offerId: string, status: "ACCEPTED" | "REJECTED") => void;
   isCounterpartTyping: boolean;
   setIsCounterpartTyping: (typing: boolean) => void;
   headerVisible: boolean;
   setHeaderVisible: (visible: boolean) => void;
+  connectionStatus: "connected" | "reconnecting" | "disconnected";
+  setConnectionStatus: (status: MessagesConversationContextValue["connectionStatus"]) => void;
+  mergeMissedMessages: (newMessages: ThreadMessage[]) => void;
 };
 
 const MessagesConversationContext =
@@ -107,7 +112,7 @@ export function normalizeRealtimeMessage(payload: Record<string, unknown>): Thre
     const m = payload.metadata as Record<string, unknown>;
     if (m.type && typeof m.type === "string") {
       metadata = {
-        type: m.type as "offer_accepted" | "payment_completed" | "order_shipped" | "sale_completed",
+        type: m.type as "offer_accepted" | "offer_cancelled_by_buyer" | "payment_completed" | "order_shipped" | "sale_completed",
         offer_amount: typeof m.offer_amount === "number" ? m.offer_amount : undefined,
         total_amount: typeof m.total_amount === "number" ? m.total_amount : undefined,
         seller_credit: typeof m.seller_credit === "number" ? m.seller_credit : undefined,
@@ -150,6 +155,7 @@ export function MessagesConversationProvider({
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [isCounterpartTyping, setIsCounterpartTyping] = useState(false);
   const [headerVisible, setHeaderVisible] = useState(true);
+  const [connectionStatus, setConnectionStatus] = useState<MessagesConversationContextValue["connectionStatus"]>("connected");
   const lastOptimisticIdRef = useRef<string | null>(null);
   const retrySendRef = useRef<((content: string) => Promise<void>) | null>(null);
 
@@ -157,17 +163,44 @@ export function MessagesConversationProvider({
     setMessages((prev) => [...olderMessages, ...prev]);
   }, []);
 
+  const appendMessages = useCallback((newerMessages: ThreadMessage[]) => {
+    if (newerMessages.length === 0) return;
+    setMessages((prev) => {
+      const existingIds = new Set(prev.map((m) => m.id));
+      const toAdd = newerMessages.filter((m) => !existingIds.has(m.id));
+      if (toAdd.length === 0) return prev;
+      return [...prev, ...toAdd];
+    });
+  }, []);
+
+  /** Fusionne les messages manqués (catch-up) avec déduplication par id et tri chronologique. */
+  const mergeMissedMessages = useCallback((newMessages: ThreadMessage[]) => {
+    if (newMessages.length === 0) return;
+    setMessages((prev) => {
+      const existingIds = new Set(prev.map((m) => m.id));
+      const toAdd = newMessages.filter((m) => !existingIds.has(m.id));
+      if (toAdd.length === 0) return prev;
+      const merged = [...prev, ...toAdd];
+      merged.sort(
+        (a, b) =>
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+      );
+      return merged;
+    });
+  }, []);
 
   const addMessage = useCallback(
     (newMsg: ThreadMessage) => {
+      const optimisticId = lastOptimisticIdRef.current;
+      if (optimisticId && newMsg.sender_id === currentUserId) {
+        lastOptimisticIdRef.current = null;
+      }
       setMessages((prev) => {
-        const optimisticId = lastOptimisticIdRef.current;
         if (
           optimisticId &&
           newMsg.sender_id === currentUserId &&
           prev.some((m) => m.id === optimisticId)
         ) {
-          lastOptimisticIdRef.current = null;
           return prev.map((m) => (m.id === optimisticId ? newMsg : m));
         }
         const existingIdx = prev.findIndex((m) => m.id === newMsg.id);
@@ -234,9 +267,28 @@ export function MessagesConversationProvider({
     );
   }, []);
 
+  const updateOfferStatus = useCallback(
+    (offerId: string, status: "ACCEPTED" | "REJECTED") => {
+      setMessages((prev) =>
+        prev.map((m) => {
+          const offer = m.offer;
+          if (!offer) return m;
+          const single =
+            Array.isArray(offer) ? offer[0] : (offer as OfferData);
+          if (!single || single.id !== offerId) return m;
+          const updated =
+            Array.isArray(offer) ? [{ ...single, status }] : { ...single, status };
+          return { ...m, offer: updated };
+        }),
+      );
+    },
+    [],
+  );
+
   const value: MessagesConversationContextValue = {
     messages,
     addMessage,
+    appendMessages,
     addOptimisticMessage,
     removeOptimisticMessage,
     markOptimisticFailed,
@@ -248,10 +300,14 @@ export function MessagesConversationProvider({
     isLoadingOlder,
     setIsLoadingOlder,
     fetchOfferDetails,
+    updateOfferStatus,
     isCounterpartTyping,
     setIsCounterpartTyping,
     headerVisible,
     setHeaderVisible,
+    connectionStatus,
+    setConnectionStatus,
+    mergeMissedMessages,
   };
 
   return (

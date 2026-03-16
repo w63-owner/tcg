@@ -4,10 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
 import { requireAuthenticatedUser } from "@/lib/auth/require-authenticated-user";
-import {
-  calculateDisplayPrice,
-  calculateFeeAmount,
-} from "@/lib/pricing";
+import { calculateFeeAmount } from "@/lib/pricing";
 import { resolveShippingCost } from "@/lib/shipping/calculate-cost";
 import { CheckoutFormClient } from "./checkout-form-client";
 
@@ -74,7 +71,10 @@ export default async function CheckoutPage({
   });
 
   const displayPrice =
-    listing.display_price ?? calculateDisplayPrice(Number(listing.price_seller));
+    listing.display_price ?? null;
+  if (displayPrice == null) {
+    notFound();
+  }
   const feeAmount = calculateFeeAmount(displayPrice, Number(listing.price_seller));
   const totalAmount = Math.round((displayPrice + shippingCost) * 100) / 100;
 

@@ -29,10 +29,18 @@ self.addEventListener("message", (event) => {
   if (event.data?.type === "SKIP_WAITING") {
     self.skipWaiting();
   }
+  if (event.data?.type === "NAVIGATE" && event.data.url) {
+    event.source?.postMessage({ type: "NAVIGATE", url: event.data.url });
+  }
 });
 
 self.addEventListener("push", (event) => {
-  if (!event.data) return;
+  if (!event.data) {
+    event.waitUntil(
+      self.registration.showNotification("Notification", { body: "" }),
+    );
+    return;
+  }
   let payload = { title: "Notification", body: "", url: "/" };
   try {
     payload = { ...payload, ...event.data.json() };
@@ -59,7 +67,7 @@ self.addEventListener("notificationclick", (event) => {
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
       const existing = clients.find((c) => c.url && new URL(c.url).origin === self.location.origin);
       if (existing) {
-        existing.navigate(fullUrl);
+        existing.postMessage({ type: "NAVIGATE", url: fullUrl });
         existing.focus();
       } else if (self.clients.openWindow) {
         self.clients.openWindow(fullUrl);
@@ -92,15 +100,17 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  event.respondWith(
-    caches.match(request).then(
-      (cached) =>
-        cached ||
-        fetch(request).then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-          return response;
-        }),
-    ),
-  );
+  // Only cache-first for explicitly listed static assets
+  const isStaticAsset = STATIC_ASSETS.includes(url.pathname)
+    || url.pathname.startsWith("/icons/");
+  if (isStaticAsset) {
+    event.respondWith(
+      caches.match(request).then(
+        (cached) => cached || fetch(request),
+      ),
+    );
+    return;
+  }
+
+  // All other GET requests: network-only (no caching of API/data)
 });
