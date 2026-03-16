@@ -252,6 +252,20 @@ export async function ensureTransactionConversation(
       return;
     }
 
+    // Idempotent: skip if a payment_completed message already exists for this transaction
+    const { data: existing } = await admin
+      .from("messages")
+      .select("id")
+      .eq("conversation_id", conversationId)
+      .eq("message_type", "system")
+      .eq("metadata->>type", "payment_completed")
+      .limit(1)
+      .maybeSingle<{ id: string }>();
+
+    if (existing) {
+      return;
+    }
+
     const { error: insertError } = await admin.from("messages").insert({
       conversation_id: conversationId,
       sender_id: tx.buyer_id,
@@ -260,6 +274,7 @@ export async function ensureTransactionConversation(
       metadata: {
         type: "payment_completed",
         total_amount: Number(tx.total_amount),
+        transaction_id: transactionId,
       },
     });
 
@@ -283,13 +298,18 @@ export async function ensureTransactionConversation(
 /**
  * Applies full "payment confirmed" flow: mark PAID, send emails, ensure conversation.
  * Used by the webhook and by the success-page sync when the webhook was not received (e.g. local dev).
+ *
+ * ensureTransactionConversation is idempotent and always runs, even when
+ * markPaid returns false (already processed), so the payment message is
+ * retried on every call until it succeeds.
  */
 export async function applyPaidCheckoutSession(
   transactionId: string,
   session: Stripe.Checkout.Session,
 ): Promise<void> {
   const transitioned = await markPaid(transactionId, session.id);
-  if (!transitioned) return;
-  await sendTransactionEmailsIfPaid(transactionId, session);
+  if (transitioned) {
+    await sendTransactionEmailsIfPaid(transactionId, session);
+  }
   await ensureTransactionConversation(transactionId);
 }

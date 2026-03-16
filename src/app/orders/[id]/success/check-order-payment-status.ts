@@ -3,7 +3,10 @@
 import Stripe from "stripe";
 import { createClient } from "@/lib/supabase/server";
 import { getRequiredEnvVar } from "@/lib/env";
-import { applyPaidCheckoutSession } from "@/lib/stripe/transaction-paid";
+import {
+  applyPaidCheckoutSession,
+  ensureTransactionConversation,
+} from "@/lib/stripe/transaction-paid";
 import { logError, logInfo } from "@/lib/observability";
 
 /**
@@ -36,6 +39,9 @@ export async function checkOrderPaymentStatus(
   if (error || !row || row.buyer_id !== user.id) return null;
 
   if (row.status === "PAID") {
+    // Webhook already processed payment; ensure the conversation message exists
+    // (idempotent — no-ops if the message was already inserted).
+    await ensureTransactionConversation(transactionId);
     return { paymentStatus: "paid" };
   }
 

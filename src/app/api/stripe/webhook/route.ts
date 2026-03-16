@@ -44,8 +44,8 @@ async function markCancelled(transactionId: string, sessionId: string) {
     })
     .eq("id", transactionId)
     .eq("status", "PENDING_PAYMENT")
-    .select("id, listing_id")
-    .maybeSingle<{ id: string; listing_id: string }>();
+    .select("id, listing_id, buyer_id")
+    .maybeSingle<{ id: string; listing_id: string; buyer_id: string }>();
 
   if (!tx) {
     logInfo({
@@ -55,11 +55,34 @@ async function markCancelled(transactionId: string, sessionId: string) {
     return;
   }
 
-  await admin
-    .from("listings")
-    .update({ status: "ACTIVE" })
-    .eq("id", tx.listing_id)
-    .eq("status", "LOCKED");
+  // Restore RESERVED if there is still an accepted offer for this buyer,
+  // otherwise fall back to ACTIVE.
+  const { data: acceptedOffer } = await admin
+    .from("offers")
+    .select("id, offer_amount")
+    .eq("listing_id", tx.listing_id)
+    .eq("buyer_id", tx.buyer_id)
+    .eq("status", "ACCEPTED")
+    .limit(1)
+    .maybeSingle<{ id: string; offer_amount: number }>();
+
+  if (acceptedOffer) {
+    await admin
+      .from("listings")
+      .update({
+        status: "RESERVED",
+        reserved_for: tx.buyer_id,
+        reserved_price: acceptedOffer.offer_amount,
+      })
+      .eq("id", tx.listing_id)
+      .eq("status", "LOCKED");
+  } else {
+    await admin
+      .from("listings")
+      .update({ status: "ACTIVE" })
+      .eq("id", tx.listing_id)
+      .eq("status", "LOCKED");
+  }
 }
 
 export async function POST(request: Request) {
