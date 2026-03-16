@@ -7,10 +7,11 @@ import { ConversationThreadConnected } from "./conversation-thread";
 import { MessagesConversationProvider } from "./messages-conversation-state";
 import { OfferModal } from "./offer-modal";
 import { AcceptOfferForm } from "./accept-offer-form";
-import { BuyReservedForm } from "./buy-reserved-form";
+import { CancelOfferForm } from "./cancel-offer-form";
+import { BuyBarClient } from "./buy-bar-client";
+import { OfferBarClient } from "./offer-bar-client";
 import { TrackingCard } from "./receipt-action-client";
 import { ShippingModalTrigger } from "@/app/profile/sales/shipping-modal-client";
-
 export const dynamic = "force-dynamic";
 export const fetchCache = "force-no-store";
 
@@ -95,13 +96,6 @@ export default async function MessagesThreadPage({
     notFound();
   }
 
-  await supabase
-    .from("messages")
-    .update({ read_at: new Date().toISOString() })
-    .eq("conversation_id", conversation.id)
-    .is("read_at", null)
-    .neq("sender_id", user.id);
-
   const { data: messages } = await supabase
     .from("messages")
     .select("id, sender_id, content, created_at, read_at, message_type, offer_id, metadata, offer:offers(id, offer_amount, status, buyer_id, listing_id)")
@@ -177,7 +171,10 @@ export default async function MessagesThreadPage({
   const isSeller = user.id === conversation.seller_id;
   const isBuyer = user.id === conversation.buyer_id;
   const listingAvailableForOffer =
-    listing && listing.status !== "SOLD" && listing.status !== "LOCKED";
+    listing &&
+    listing.status !== "SOLD" &&
+    listing.status !== "LOCKED" &&
+    listing.status !== "RESERVED";
   const listingAlreadySold = listing?.status === "SOLD";
   const showOfferButton =
     canOffer && !hasPendingOfferFromBuyer && Boolean(listingAvailableForOffer);
@@ -215,88 +212,87 @@ export default async function MessagesThreadPage({
     acceptedOfferId && !isSeller && !hasPaidTransaction && !listingAlreadySold,
   );
   const showReceiptConfirmBar = Boolean(isBuyer && shippedTransaction);
-  const extraBottomBars = [
-    showShippingButton,
-    showOfferBar,
-    showBuyReservedBar,
-    showReceiptConfirmBar,
-  ].filter(Boolean).length;
-  const bottomPadding =
-    extraBottomBars > 0
-      ? `pb-[calc(${8.5 + extraBottomBars * 3.5}rem+var(--safe-area-bottom))]`
-      : "pb-[calc(8.5rem+var(--safe-area-bottom))]";
 
   return (
-    <section
-      className={`flex min-h-[calc(100dvh-8rem)] flex-col gap-3 md:pb-0 ${bottomPadding}`}
-    >
+    <section className="fixed inset-x-0 bottom-0 top-0 md:top-16 flex flex-col overflow-hidden">
       <MessagesConversationProvider
         key={conversation.id}
         initialMessages={rows}
         conversationId={conversation.id}
         currentUserId={user.id}
         initialHasMore={rows.length >= 50}
+        initialAcceptedOfferId={acceptedOfferId}
       >
-        <ThreadRealtime conversationId={conversation.id} currentUserId={user.id} />
+        <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          <ThreadRealtime conversationId={conversation.id} currentUserId={user.id} />
 
-        <ConversationHeader
-          conversationId={conversation.id}
-          counterpart={counterpart ?? null}
-          listing={listing}
-        />
-
-      <div className="flex-1 overflow-hidden">
-        <div className="h-full pt-3">
-          <ConversationThreadConnected
-            conversationId={conversation.id}
-            currentUserId={user.id}
-            sellerId={conversation.seller_id}
-            buyerUsername={pickOne(conversation.buyer)?.username ?? null}
-            counterpartName={counterpart ?? null}
-          />
-        </div>
-      </div>
-
-      <div className="fixed inset-x-0 bottom-0 z-40 flex flex-col backdrop-blur md:static md:rounded-md">
-        {showShippingButton ? (
-          <div className="bg-background/95 px-4 py-2 md:px-4 md:py-2">
-            <ShippingModalTrigger
-              transactionId={paidTransactionRow!.id}
-              triggerClassName="w-full"
-            />
-          </div>
-        ) : null}
-        {showOfferBar ? (
-          <div className="bg-background/95 px-4 py-2 md:px-4 md:py-2">
-            <OfferModal
+          <div className="shrink-0 z-10">
+            <ConversationHeader
               conversationId={conversation.id}
-              listingId={listing!.id}
-              listingTitle={listing!.title}
-              listingCoverUrl={listing!.cover_image_url ?? undefined}
-              basePrice={basePrice}
-              canOffer={true}
+              counterpart={counterpart ?? null}
+              listing={listing}
             />
           </div>
-        ) : null}
-        {showBuyReservedBar ? (
-          <div className="bg-background/95 px-4 py-2 md:px-4 md:py-2">
-            <BuyReservedForm offerId={acceptedOfferId!} />
+
+          <div className="flex-1 overflow-hidden min-h-0 relative">
+            <div className="absolute inset-0 pt-1 flex flex-col">
+              <ConversationThreadConnected
+                conversationId={conversation.id}
+                currentUserId={user.id}
+                sellerId={conversation.seller_id}
+                buyerUsername={pickOne(conversation.buyer)?.username ?? null}
+                counterpartName={counterpart ?? null}
+              />
+            </div>
           </div>
-        ) : null}
-        {showReceiptConfirmBar && shippedTransaction ? (
-          <div className="bg-background/95 px-4 py-2 md:px-4 md:py-2">
-            <TrackingCard transaction={shippedTransaction} />
-          </div>
-        ) : null}
-        <div className="bg-background/95 px-4 pt-2 pb-[max(0.75rem,var(--safe-area-bottom))] md:p-2">
-          <ConversationLiveControls
-            conversationId={conversation.id}
-            currentUserId={user.id}
-            counterpartUserId={counterpartUserId}
-            counterpartName={counterpart ?? "Utilisateur"}
+
+      {/* Barre fixe en bas : boutons d’action puis zone de texte tout en bas de l’écran */}
+      <div className="shrink-0 flex flex-col bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-t">
+        <div className="mx-auto flex w-full max-w-7xl flex-col px-4 md:px-6">
+          {showShippingButton ? (
+            <div className="py-2">
+              <ShippingModalTrigger
+                transactionId={paidTransactionRow!.id}
+                triggerClassName="w-full"
+              />
+            </div>
+          ) : null}
+          {showOfferBar ? (
+            <OfferBarClient>
+              <div className="py-2">
+                <OfferModal
+                  conversationId={conversation.id}
+                  listingId={listing!.id}
+                  listingTitle={listing!.title}
+                  listingCoverUrl={listing!.cover_image_url ?? undefined}
+                  basePrice={basePrice}
+                  canOffer={true}
+                />
+              </div>
+            </OfferBarClient>
+          ) : null}
+          <BuyBarClient
+            isSeller={isSeller}
+            hasPaidTransaction={hasPaidTransaction}
+            listingAlreadySold={listingAlreadySold}
           />
+          {showReceiptConfirmBar && shippedTransaction ? (
+            <div className="py-2">
+              <TrackingCard transaction={shippedTransaction} />
+            </div>
+          ) : null}
+          {/* Zone de saisie tout en bas de l’écran */}
+          <div className="p-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] md:p-4">
+            <ConversationLiveControls
+              conversationId={conversation.id}
+              currentUserId={user.id}
+              counterpartUserId={counterpartUserId}
+              counterpartName={counterpart ?? "Utilisateur"}
+            />
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
       </MessagesConversationProvider>
     </section>
   );

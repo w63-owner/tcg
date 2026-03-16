@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { clearMarketplaceFeedCache } from "@/components/marketplace/infinite-listings-feed";
+import { useInvalidateFeedCache } from "@/components/marketplace/infinite-listings-feed";
 import { checkOrderPaymentStatus } from "./check-order-payment-status";
 
 const POLL_INTERVAL_MS = 2000;
@@ -17,6 +17,7 @@ type Props = { transactionId: string };
 export function PollPaymentStatus({ transactionId }: Props) {
   const router = useRouter();
   const pollCountRef = useRef(0);
+  const invalidateFeed = useInvalidateFeedCache();
 
   useEffect(() => {
     const interval = setInterval(async () => {
@@ -28,13 +29,13 @@ export function PollPaymentStatus({ transactionId }: Props) {
       const result = await checkOrderPaymentStatus(transactionId);
       if (result?.paymentStatus === "paid") {
         clearInterval(interval);
-        clearMarketplaceFeedCache();
+        invalidateFeed();
         router.refresh();
       }
     }, POLL_INTERVAL_MS);
 
     return () => clearInterval(interval);
-  }, [transactionId, router]);
+  }, [transactionId, router, invalidateFeed]);
 
   return null;
 }

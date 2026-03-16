@@ -12,7 +12,6 @@ import { updateListingPriceAction } from "./actions";
 import { BuyButton } from "./buy-button";
 import { ListingErrorToast } from "./listing-error-toast";
 import { createConversationForListingAction } from "@/app/messages/actions";
-import { calculateDisplayPrice } from "@/lib/pricing";
 import { formatConditionLabel } from "@/lib/listings/condition-label";
 
 type ListingDetailsRow = {
@@ -244,21 +243,20 @@ export default async function ListingPage({
   let priceHistory: Array<{ date: string; price: number }> = (historyResult.data ?? [])
     .map((row) => ({
       date: row.created_at as string,
-      price: Number(row.display_price ?? calculateDisplayPrice(Number(row.price_seller))),
+      price: Number(row.display_price ?? 0),
     }))
     .filter((row) => Number.isFinite(row.price) && row.price > 0);
 
-  if (priceHistory.length === 0) {
+  if (priceHistory.length === 0 && listing.display_price != null) {
     priceHistory = [
       {
         date: listing.created_at,
-        price: Number(listing.display_price ?? calculateDisplayPrice(Number(listing.price_seller))),
+        price: Number(listing.display_price),
       },
     ];
   }
 
-  const displayPrice =
-    listing.display_price ?? calculateDisplayPrice(Number(listing.price_seller));
+  const displayPrice = listing.display_price ?? 0;
   const canBuy = listing.status === "ACTIVE" && user && user.id !== listing.seller_id;
   const isSeller = Boolean(user && user.id === listing.seller_id);
   const showMobileStickyActions = listing.status === "ACTIVE" && !isSeller;

@@ -34,6 +34,16 @@ export type FeedFilters = {
   sort: string;
 };
 
+/** Cursor for keyset pagination (opaque for API: encode/decode as base64 JSON). */
+export type FeedCursor = {
+  id: string;
+  created_at: string;
+  display_price: number | null;
+  grade_note: number | null;
+};
+
+const FEED_PAGE_SIZE_MAX = 50;
+
 function parseOptionalNumber(value: string | undefined) {
   if (!value || value.trim() === "") return null;
   const parsed = Number(value);
@@ -65,20 +75,67 @@ export async function fetchSetOptions(supabase: SupabaseClient) {
   return Array.from(new Set((setRows ?? []).map((row) => row.name).filter(Boolean)));
 }
 
+type RawFeedRow = {
+  id: string;
+  title: string;
+  cover_image_url: string | null;
+  price_seller: number;
+  display_price: number | null;
+  condition: string | null;
+  is_graded: boolean;
+  grading_company: string | null;
+  grade_note: number | null;
+  card_ref_id: string | null;
+  created_at: string;
+  language: string | null;
+  favorite_count: number;
+};
+
+export function encodeFeedCursor(cursor: FeedCursor): string {
+  return Buffer.from(JSON.stringify(cursor), "utf-8").toString("base64url");
+}
+
+export function decodeFeedCursor(token: string | null | undefined): FeedCursor | null {
+  if (!token || typeof token !== "string" || token.trim() === "") return null;
+  try {
+    const raw = JSON.parse(
+      Buffer.from(token, "base64url").toString("utf-8"),
+    ) as unknown;
+    if (
+      raw &&
+      typeof raw === "object" &&
+      "id" in raw &&
+      typeof (raw as FeedCursor).id === "string" &&
+      "created_at" in raw &&
+      typeof (raw as FeedCursor).created_at === "string"
+    ) {
+      const c = raw as FeedCursor;
+      return {
+        id: c.id,
+        created_at: c.created_at,
+        display_price: typeof c.display_price === "number" ? c.display_price : null,
+        grade_note: typeof c.grade_note === "number" ? c.grade_note : null,
+      };
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
 export async function fetchListingsFeedPage(params: {
   supabase: SupabaseClient;
   filters: FeedFilters;
-  page: number;
+  /** Cursor from previous page (opaque token or decoded). Omit for first page. */
+  cursor?: FeedCursor | null;
   pageSize: number;
   /** When set, listings from this seller are excluded (e.g. current user's own listings). */
   excludeSellerId?: string;
 }) {
-  const { supabase, filters, page, pageSize, excludeSellerId } = params;
+  const { supabase, filters, cursor, pageSize, excludeSellerId } = params;
   const totalStart = performance.now();
-
-  const pageNumber = Math.max(1, Number(page) || 1);
-  const offset = (pageNumber - 1) * pageSize;
-  const limit = pageSize + 1;
+  const cappedSize = Math.min(FEED_PAGE_SIZE_MAX, Math.max(1, pageSize));
+  const limit = cappedSize + 1;
 
   const isGradedBoolean: boolean | null =
     filters.is_graded === "1" ? true : filters.is_graded === "0" ? false : null;
@@ -95,7 +152,10 @@ export async function fetchListingsFeedPage(params: {
     p_price_min: filters.price_min ?? null,
     p_price_max: filters.price_max ?? null,
     p_sort: filters.sort || "date_desc",
-    p_offset: offset,
+    p_cursor_id: cursor?.id ?? null,
+    p_cursor_created_at: cursor?.created_at ?? null,
+    p_cursor_display_price: cursor?.display_price ?? null,
+    p_cursor_grade_note: cursor?.grade_note ?? null,
     p_limit: limit,
     p_exclude_seller_id: excludeSellerId ?? null,
   });
@@ -104,6 +164,7 @@ export async function fetchListingsFeedPage(params: {
   if (error) {
     return {
       listings: [] as ListingFeedRow[],
+      nextCursor: null,
       hasNextPage: false,
       error: error.message,
       performance: {
@@ -115,23 +176,19 @@ export async function fetchListingsFeedPage(params: {
     };
   }
 
-  const rawRows = (rows ?? []) as Array<{
-    id: string;
-    title: string;
-    cover_image_url: string | null;
-    price_seller: number;
-    display_price: number | null;
-    condition: string | null;
-    is_graded: boolean;
-    grading_company: string | null;
-    grade_note: number | null;
-    card_ref_id: string | null;
-    created_at: string;
-    language: string | null;
-    favorite_count: number;
-  }>;
-  const hasNextPage = rawRows.length > pageSize;
-  const pageRows = rawRows.slice(0, pageSize);
+  const rawRows = (rows ?? []) as RawFeedRow[];
+  const hasNextPage = rawRows.length > cappedSize;
+  const pageRows = rawRows.slice(0, cappedSize);
+  const last = pageRows[pageRows.length - 1];
+  const nextCursor: FeedCursor | null =
+    hasNextPage && last
+      ? {
+          id: last.id,
+          created_at: last.created_at,
+          display_price: last.display_price ?? null,
+          grade_note: last.grade_note ?? null,
+        }
+      : null;
 
   const totalMs = performance.now() - totalStart;
   return {
@@ -148,6 +205,7 @@ export async function fetchListingsFeedPage(params: {
       language: row.language,
       favorite_count: Number(row.favorite_count ?? 0),
     })),
+    nextCursor,
     hasNextPage,
     error: null,
     performance: {

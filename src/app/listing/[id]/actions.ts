@@ -5,10 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireAuthenticatedUser } from "@/lib/auth/require-authenticated-user";
 import { logError, logInfo } from "@/lib/observability";
-import {
-  calculateDisplayPrice,
-  calculateFeeAmount,
-} from "@/lib/pricing";
+import { calculateFeeAmount } from "@/lib/pricing";
 import { resolveShippingCost } from "@/lib/shipping/calculate-cost";
 import { createStripeCheckoutSession } from "@/lib/stripe/checkout";
 import type { OfferActionState } from "./offer-action-state";
@@ -71,8 +68,15 @@ export async function startCheckoutAction(formData: FormData) {
     weightClass: listing.delivery_weight_class,
   });
 
-  const displayPrice =
-    listing.display_price ?? calculateDisplayPrice(Number(listing.price_seller));
+  if (listing.display_price == null) {
+    logError({
+      event: "listing_checkout_display_price_missing",
+      message: "listing.display_price is null",
+      context: { listingId, userId: user.id },
+    });
+    redirect(`/listing/${listingId}?error=invalid_listing_price`);
+  }
+  const displayPrice = listing.display_price;
   const feeAmount = calculateFeeAmount(displayPrice, Number(listing.price_seller));
   const totalAmount = Math.round((displayPrice + shippingCost) * 100) / 100;
 
@@ -122,10 +126,23 @@ export async function startCheckoutAction(formData: FormData) {
       redirect(`/listing/${listingId}?error=stripe_session_failed`);
     }
 
-    await supabase.rpc("attach_checkout_session_to_transaction", {
+    const { error: attachError } = await supabase.rpc("attach_checkout_session_to_transaction", {
       p_transaction_id: transactionId,
       p_session_id: session.id,
     });
+
+    if (attachError) {
+      logError({
+        event: "listing_checkout_attach_session_failed",
+        message: attachError.message,
+        context: { listingId, transactionId, sessionId: session.id, userId: user.id },
+      });
+      await supabase.rpc("cancel_pending_transaction_and_unlock_listing", {
+        p_transaction_id: transactionId,
+      });
+      redirect(`/listing/${listingId}?error=attach_session_failed`);
+    }
+
     logInfo({
       event: "listing_checkout_session_created",
       context: { listingId, transactionId, sessionId: session.id, userId: user.id },
@@ -188,11 +205,18 @@ export async function submitOfferAction(
 
   const { data: listing } = await supabase
     .from("listings")
-    .select("seller_id")
+    .select("seller_id, status")
     .eq("id", listingId)
-    .single<{ seller_id: string }>();
+    .single<{ seller_id: string; status: string }>();
 
-  if (listing?.seller_id === user.id) {
+  if (!listing || listing.status !== "ACTIVE") {
+    return {
+      status: "error",
+      message: "Cette annonce n'est plus disponible.",
+    };
+  }
+
+  if (listing.seller_id === user.id) {
     return {
       status: "error",
       message: "Tu ne peux pas faire une offre sur ta propre annonce.",

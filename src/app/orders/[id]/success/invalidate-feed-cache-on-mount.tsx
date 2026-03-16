@@ -1,15 +1,16 @@
 "use client";
 
 import { useEffect } from "react";
-import { clearMarketplaceFeedCache } from "@/components/marketplace/infinite-listings-feed";
+import { useInvalidateFeedCache } from "@/components/marketplace/infinite-listings-feed";
 
 /**
- * Invalidates the marketplace feed session cache when the user lands on the order success page
+ * Invalidates the marketplace feed React Query cache when the user lands on the order success page
  * with payment already confirmed, so "Retour à l'accueil" shows an up-to-date feed (listing no longer visible).
  */
 export function InvalidateFeedCacheOnMount() {
+  const invalidateFeed = useInvalidateFeedCache();
   useEffect(() => {
-    clearMarketplaceFeedCache();
-  }, []);
+    invalidateFeed();
+  }, [invalidateFeed]);
   return null;
 }

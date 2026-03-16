@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { CardItem } from "@/components/marketplace/card-item";
 import { Button } from "@/components/ui/button";
 import type { ListingFeedRow } from "@/lib/listings/feed";
@@ -9,40 +10,72 @@ type InfiniteListingsFeedProps = {
   initialListings: ListingFeedRow[];
   initialFavoriteListingIds: string[];
   initialHasNextPage: boolean;
+  /** Opaque cursor for the next page (from previous response). */
+  initialNextCursor: string | null;
   filters: Record<string, string | undefined>;
   showFavoriteToggle: boolean;
   fromHref: string;
 };
 
-type FeedApiResponse = {
+type FeedPage = {
   listings: ListingFeedRow[];
+  nextCursor: string | null;
   hasNextPage: boolean;
   favoriteListingIds: string[];
   error?: string;
 };
 
+const FEED_QUERY_KEY_PREFIX = ["listings", "feed"] as const;
+
+function buildFeedQueryKey(queryString: string) {
+  return [...FEED_QUERY_KEY_PREFIX, queryString || "default"] as const;
+}
+
+async function fetchFeedPage(
+  queryString: string,
+  cursor: string | null,
+): Promise<FeedPage> {
+  const params = new URLSearchParams(queryString);
+  params.set("pageSize", "40");
+  if (cursor) params.set("cursor", cursor);
+  const response = await fetch(`/api/listings/feed?${params.toString()}`);
+  const json = (await response.json()) as FeedPage & { error?: string };
+  if (!response.ok || json.error) {
+    throw new Error(json.error ?? "Impossible de charger plus d'annonces.");
+  }
+  return {
+    listings: json.listings,
+    nextCursor: json.nextCursor ?? null,
+    hasNextPage: Boolean(json.hasNextPage),
+    favoriteListingIds: json.favoriteListingIds ?? [],
+  };
+}
+
 type ListingItem = ListingFeedRow & {
   initialFavorite: boolean;
 };
 
-function toListingItems(listings: ListingFeedRow[], favoriteIds: string[]) {
-  return Array.from(
-    new Map(
-      listings.map((listing) => [
-        listing.id,
-        {
-          ...listing,
-          initialFavorite: favoriteIds.includes(listing.id),
-        },
-      ]),
-    ).values(),
+function flattenPagesToItems(pages: FeedPage[]): ListingItem[] {
+  const favoriteIds = new Set(
+    pages.flatMap((p) => p.favoriteListingIds),
   );
+  const byId = new Map<string, ListingItem>();
+  for (const page of pages) {
+    for (const listing of page.listings) {
+      byId.set(listing.id, {
+        ...listing,
+        initialFavorite: favoriteIds.has(listing.id),
+      });
+    }
+  }
+  return Array.from(byId.values());
 }
 
 export function InfiniteListingsFeed({
   initialListings,
   initialFavoriteListingIds,
   initialHasNextPage,
+  initialNextCursor,
   filters,
   showFavoriteToggle,
   fromHref,
@@ -54,113 +87,76 @@ export function InfiniteListingsFeed({
     });
     return params.toString();
   }, [filters]);
-  const cacheKey = useMemo(
-    () => `marketplace-feed:${queryString || "default"}`,
+
+  const queryKey = useMemo(
+    () => buildFeedQueryKey(queryString),
     [queryString],
   );
-  const [items, setItems] = useState<ListingItem[]>(
-    toListingItems(initialListings, initialFavoriteListingIds),
+
+  const initialPage: FeedPage = useMemo(
+    () => ({
+      listings: initialListings,
+      nextCursor: initialNextCursor,
+      hasNextPage: initialHasNextPage,
+      favoriteListingIds: initialFavoriteListingIds,
+    }),
+    [
+      initialListings,
+      initialNextCursor,
+      initialHasNextPage,
+      initialFavoriteListingIds,
+    ],
   );
-  const [page, setPage] = useState(1);
-  const [hasNextPage, setHasNextPage] = useState(initialHasNextPage);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    error,
+    status,
+  } = useInfiniteQuery({
+    queryKey,
+    queryFn: ({ pageParam }) =>
+      fetchFeedPage(queryString, pageParam as string | null),
+    getNextPageParam: (lastPage) =>
+      lastPage.hasNextPage ? lastPage.nextCursor : undefined,
+    initialPageParam: undefined as string | undefined,
+    initialData: {
+      pages: [initialPage],
+      pageParams: [undefined],
+    },
+    // Uses QueryClient default staleTime (1 min); feed is cached per filter set
+  });
+
+  const items = useMemo(
+    () => (data?.pages ? flattenPagesToItems(data.pages) : []),
+    [data?.pages],
+  );
+
+  const loadMore = useCallback(() => {
+    void fetchNextPage();
+  }, [fetchNextPage]);
+
   const sentinelRef = useRef<HTMLDivElement | null>(null);
-  const inFlightRef = useRef(false);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      const raw = window.sessionStorage.getItem(cacheKey);
-      if (!raw) {
-        setItems(toListingItems(initialListings, initialFavoriteListingIds));
-        setPage(1);
-        setHasNextPage(initialHasNextPage);
-        return;
-      }
-      const parsed = JSON.parse(raw) as {
-        items?: ListingItem[];
-        page?: number;
-        hasNextPage?: boolean;
-        timestamp?: number;
-      };
-      if (!parsed.timestamp || Date.now() - parsed.timestamp > 300000)
-        throw new Error("Cache expiré");
-      if (!Array.isArray(parsed.items) || parsed.items.length === 0) {
-        setItems(toListingItems(initialListings, initialFavoriteListingIds));
-        setPage(1);
-        setHasNextPage(initialHasNextPage);
-        return;
-      }
-      setItems(parsed.items);
-      setPage(Math.max(1, Number(parsed.page ?? 1) || 1));
-      setHasNextPage(Boolean(parsed.hasNextPage));
-    } catch {
-      setItems(toListingItems(initialListings, initialFavoriteListingIds));
-      setPage(1);
-      setHasNextPage(initialHasNextPage);
-    }
-  }, [cacheKey, initialHasNextPage, initialFavoriteListingIds, initialListings]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const payload = JSON.stringify({
-      items,
-      page,
-      hasNextPage,
-      timestamp: Date.now(),
-    });
-    window.sessionStorage.setItem(cacheKey, payload);
-  }, [cacheKey, hasNextPage, items, page]);
-
-  const loadMore = useCallback(async () => {
-    if (!hasNextPage || isLoadingMore || inFlightRef.current) return;
-    inFlightRef.current = true;
-    setIsLoadingMore(true);
-    setLoadError(null);
-    try {
-      const nextPage = page + 1;
-      const qs = queryString ? `${queryString}&page=${nextPage}` : `page=${nextPage}`;
-      const response = await fetch(`/api/listings/feed?${qs}`);
-      const json = (await response.json()) as FeedApiResponse;
-      if (!response.ok || json.error) {
-        setLoadError(json.error ?? "Impossible de charger plus d'annonces.");
-        return;
-      }
-
-      const nextItems = json.listings.map((listing) => ({
-        ...listing,
-        initialFavorite: json.favoriteListingIds.includes(listing.id),
-      }));
-      setItems((previous) =>
-        Array.from(
-          new Map([...previous, ...nextItems].map((item) => [item.id, item])).values(),
-        ),
-      );
-      setPage(nextPage);
-      setHasNextPage(Boolean(json.hasNextPage));
-    } catch {
-      setLoadError("Erreur reseau lors du chargement.");
-    } finally {
-      inFlightRef.current = false;
-      setIsLoadingMore(false);
-    }
-  }, [hasNextPage, isLoadingMore, page, queryString]);
 
   useEffect(() => {
     const target = sentinelRef.current;
-    if (!target || !hasNextPage) return;
+    if (!target || !hasNextPage || isFetchingNextPage || status === "error") return;
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting)) {
-          void loadMore();
+          loadMore();
         }
       },
       { rootMargin: "280px 0px 280px 0px" },
     );
     observer.observe(target);
     return () => observer.disconnect();
-  }, [hasNextPage, loadMore]);
+  }, [hasNextPage, isFetchingNextPage, status, loadMore]);
+
+  const loadError =
+    status === "error" && error instanceof Error ? error.message : null;
 
   if (items.length === 0) return null;
 
@@ -191,7 +187,18 @@ export function InfiniteListingsFeed({
       <div ref={sentinelRef} className="h-4 w-full" />
 
       {loadError ? (
-        <p className="text-destructive text-center text-sm">{loadError}</p>
+        <div className="flex flex-col items-center gap-2">
+          <p className="text-destructive text-center text-sm">{loadError}</p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => loadMore()}
+            disabled={isFetchingNextPage}
+          >
+            Réessayer
+          </Button>
+        </div>
       ) : null}
 
       {hasNextPage ? (
@@ -199,10 +206,10 @@ export function InfiniteListingsFeed({
           <Button
             type="button"
             variant="outline"
-            onClick={() => void loadMore()}
-            disabled={isLoadingMore}
+            onClick={() => loadMore()}
+            disabled={isFetchingNextPage}
           >
-            {isLoadingMore ? "Chargement..." : "Charger plus"}
+            {isFetchingNextPage ? "Chargement..." : "Charger plus"}
           </Button>
         </div>
       ) : (
@@ -212,12 +219,16 @@ export function InfiniteListingsFeed({
   );
 }
 
-export function clearMarketplaceFeedCache() {
-  if (typeof window === "undefined") return;
-  const keysToRemove: string[] = [];
-  for (let i = 0; i < sessionStorage.length; i++) {
-    const key = sessionStorage.key(i);
-    if (key?.startsWith("marketplace-feed:")) keysToRemove.push(key);
-  }
-  keysToRemove.forEach((k) => sessionStorage.removeItem(k));
+/** Query key prefix for feed; use with invalidateQueries / removeQueries to clear all feed cache. */
+export const marketplaceFeedQueryKey = FEED_QUERY_KEY_PREFIX;
+
+/**
+ * Call this to invalidate the React Query feed cache (e.g. after order success so the listing disappears).
+ * Replaces the previous sessionStorage-based clearMarketplaceFeedCache.
+ */
+export function useInvalidateFeedCache() {
+  const queryClient = useQueryClient();
+  return useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: FEED_QUERY_KEY_PREFIX });
+  }, [queryClient]);
 }

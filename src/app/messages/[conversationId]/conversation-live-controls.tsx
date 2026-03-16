@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Image, Loader2, Send } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { uploadMessageImageAction } from "../actions";
 import { useMessagesConversation } from "./messages-conversation-state";
@@ -41,7 +41,11 @@ export function ConversationLiveControls({
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const MIN_TEXTAREA_HEIGHT = 40;
+  const MAX_TEXTAREA_HEIGHT = 120;
   const lastTypingEmitRef = useRef<number>(0);
   const TYPING_THROTTLE_MS = 1000;
 
@@ -169,6 +173,17 @@ export function ConversationLiveControls({
     };
   }, [conversationId, counterpartUserId, currentUserId, supabase]);
 
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const height = Math.min(
+      MAX_TEXTAREA_HEIGHT,
+      Math.max(MIN_TEXTAREA_HEIGHT, el.scrollHeight),
+    );
+    el.style.height = `${height}px`;
+  }, [content]);
+
   const onChange = (value: string) => {
     setContent(value);
     emitTyping(true);
@@ -187,8 +202,20 @@ export function ConversationLiveControls({
   const onImageSelect = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
-      if (!file || isUploadingImage || isSending) return;
+      if (!file || isSending) return;
       event.target.value = "";
+
+      const tempId = crypto.randomUUID();
+      const objectUrl = URL.createObjectURL(file);
+      addOptimisticMessage({
+        id: tempId,
+        sender_id: currentUserId,
+        content: "Image envoyée",
+        created_at: new Date().toISOString(),
+        read_at: null,
+        message_type: "image",
+        metadata: { uploading: true, preview_url: objectUrl },
+      });
 
       setIsUploadingImage(true);
       try {
@@ -207,15 +234,25 @@ export function ConversationLiveControls({
             metadata: result.message.metadata,
           });
         } else {
+          markOptimisticFailed(tempId);
           toast.error(result.error ?? "Impossible d'envoyer l'image.");
         }
       } catch {
+        markOptimisticFailed(tempId);
         toast.error("Erreur lors de l'envoi de l'image.");
       } finally {
         setIsUploadingImage(false);
+        URL.revokeObjectURL(objectUrl);
       }
     },
-    [addMessage, conversationId, currentUserId, isSending, isUploadingImage],
+    [
+      addMessage,
+      addOptimisticMessage,
+      conversationId,
+      currentUserId,
+      isSending,
+      markOptimisticFailed,
+    ],
   );
 
   return (
@@ -244,7 +281,8 @@ export function ConversationLiveControls({
             <Image className="size-4" />
           )}
         </Button>
-        <Textarea
+        <textarea
+          ref={textareaRef}
           value={content}
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={(event) => {
@@ -256,7 +294,10 @@ export function ConversationLiveControls({
           placeholder="Ecris ton message..."
           maxLength={2000}
           rows={1}
-          className="min-h-[40px] max-h-[120px] resize-none overflow-y-auto rounded-xl py-2.5"
+          className={cn(
+            "border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 dark:bg-input/30 flex w-full resize-none overflow-y-auto rounded-xl border bg-transparent px-3 py-2.5 text-base shadow-xs outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
+            "min-h-[40px] max-h-[120px] transition-[height] duration-150 ease-out",
+          )}
         />
         <Button
           type="button"

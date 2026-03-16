@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { logError, logInfo } from "@/lib/observability";
 import { requireAuthenticatedUser } from "@/lib/auth/require-authenticated-user";
 import {
@@ -80,7 +81,8 @@ export async function respondToOfferAction(formData: FormData) {
           reserved_for: fullOffer.buyer_id,
           reserved_price: fullOffer.offer_amount,
         })
-        .eq("id", fullOffer.listing_id);
+        .eq("id", fullOffer.listing_id)
+        .in("status", ["ACTIVE"]);
     }
 
     const { data: convId } = await supabase.rpc("ensure_conversation_for_offer", {
@@ -131,12 +133,72 @@ export async function cancelSentOfferAction(formData: FormData) {
     return;
   }
 
-  await supabase
+  const { data: offer } = await supabase
+    .from("offers")
+    .select("id, listing_id, status, conversation_id, listing:listings!inner(seller_id)")
+    .eq("id", offerId)
+    .eq("buyer_id", user.id)
+    .in("status", ["PENDING", "ACCEPTED"])
+    .maybeSingle<{
+      id: string;
+      listing_id: string;
+      status: string;
+      conversation_id: string | null;
+      listing: { seller_id: string };
+    }>();
+
+  if (!offer) {
+    return;
+  }
+
+  const admin = createAdminClient();
+
+  await admin
     .from("offers")
     .update({ status: "CANCELLED" })
     .eq("id", offerId)
     .eq("buyer_id", user.id)
-    .eq("status", "PENDING");
+    .in("status", ["PENDING", "ACCEPTED"]);
+
+  if (offer.status === "ACCEPTED") {
+    await admin
+      .from("listings")
+      .update({
+        status: "ACTIVE",
+        reserved_for: null,
+        reserved_price: null,
+      })
+      .eq("id", offer.listing_id)
+      .eq("status", "RESERVED");
+
+    let conversationId = offer.conversation_id;
+    if (!conversationId) {
+      const { data: conv } = await supabase
+        .from("conversations")
+        .select("id")
+        .eq("listing_id", offer.listing_id)
+        .eq("buyer_id", user.id)
+        .eq("seller_id", offer.listing.seller_id)
+        .maybeSingle<{ id: string }>();
+      conversationId = conv?.id ?? null;
+    }
+
+    if (conversationId) {
+      await supabase.from("messages").insert({
+        conversation_id: conversationId,
+        sender_id: user.id,
+        content: "Offre annulée par l'acheteur",
+        message_type: "system",
+        metadata: { type: "offer_cancelled_by_buyer" },
+      });
+    }
+
+    revalidatePath(`/listing/${offer.listing_id}`);
+    revalidatePath("/messages");
+    if (offer.conversation_id) {
+      revalidatePath(`/messages/${offer.conversation_id}`);
+    }
+  }
 
   revalidatePath("/offers");
 }

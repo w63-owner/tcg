@@ -98,14 +98,32 @@ export async function POST(request: Request) {
       message: error instanceof Error ? error.message : "invalid signature",
     });
     return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Invalid webhook signature",
-      },
+      { error: "Invalid webhook signature" },
       { status: 400 },
     );
+  }
+
+  const isPaymentOrCancellationEvent =
+    event.type === "checkout.session.completed" ||
+    event.type === "checkout.session.async_payment_succeeded" ||
+    event.type === "checkout.session.expired" ||
+    event.type === "checkout.session.async_payment_failed";
+
+  if (isPaymentOrCancellationEvent) {
+    const admin = createAdminClient();
+    const { data: inserted } = await admin
+      .from("stripe_webhooks_processed")
+      .insert({ stripe_event_id: event.id, event_type: event.type })
+      .select("stripe_event_id")
+      .maybeSingle();
+
+    if (!inserted) {
+      logInfo({
+        event: "stripe_webhook_idempotent_skip",
+        context: { eventId: event.id, eventType: event.type },
+      });
+      return NextResponse.json({ received: true });
+    }
   }
 
   try {
