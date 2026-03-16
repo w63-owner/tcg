@@ -100,8 +100,8 @@ export function ThreadRealtime({
                 msgs.length > 0 ? msgs[msgs.length - 1].created_at : null;
               if (lastCreatedAt) {
                 setConnectionStatus("reconnecting");
-                void fetchMessagesSince(conversationId, lastCreatedAt).then(
-                  (result) => {
+                void fetchMessagesSince(conversationId, lastCreatedAt)
+                  .then((result) => {
                     if (
                       result.ok &&
                       result.messages &&
@@ -113,8 +113,11 @@ export function ThreadRealtime({
                     }
                     wasDisconnectedRef.current = false;
                     setConnectionStatus("connected");
-                  },
-                );
+                  })
+                  .catch(() => {
+                    wasDisconnectedRef.current = false;
+                    setConnectionStatus("connected");
+                  });
                 return;
               }
             }

@@ -13,13 +13,6 @@ type TransactionRow = {
   shipping_cost: number;
 };
 
-type WalletRow = {
-  user_id: string;
-  pending_balance: number;
-  available_balance: number;
-  currency: string;
-};
-
 function roundMoney(value: number) {
   return Math.round(value * 100) / 100;
 }
@@ -38,12 +31,12 @@ function formatStripeAddress(addr: Stripe.Address | null): string {
 
 /**
  * Marks transaction as PAID, listing as SOLD, credits seller wallet.
- * Idempotent: no-op if transaction is already PAID.
+ * Returns true if the transition actually happened, false if already processed.
  */
 export async function markPaid(
   transactionId: string,
   sessionId: string,
-): Promise<void> {
+): Promise<boolean> {
   const admin = createAdminClient();
 
   const { data: tx, error: updateTxError } = await admin
@@ -71,14 +64,14 @@ export async function markPaid(
       event: "stripe_mark_paid_noop",
       context: { transactionId, sessionId },
     });
-    return;
+    return false;
   }
 
   const { error: listingError } = await admin
     .from("listings")
     .update({ status: "SOLD", reserved_for: null, reserved_price: null })
     .eq("id", tx.listing_id)
-    .in("status", ["LOCKED", "ACTIVE", "RESERVED"]);
+    .in("status", ["LOCKED", "RESERVED"]);
 
   if (listingError) {
     logError({
@@ -107,45 +100,21 @@ export async function markPaid(
     Math.max(0, Number(tx.total_amount) - Number(tx.fee_amount)),
   );
 
-  const { data: wallet } = await admin
-    .from("wallets")
-    .select("user_id, pending_balance, available_balance, currency")
-    .eq("user_id", tx.seller_id)
-    .maybeSingle<WalletRow>();
-
-  if (!wallet) {
-    const { error: insertWalletError } = await admin.from("wallets").insert({
-      user_id: tx.seller_id,
-      available_balance: 0,
-      pending_balance: sellerCredit,
-      currency: "EUR",
-    });
-    if (insertWalletError) {
-      logError({
-        event: "stripe_mark_paid_wallet_insert_failed",
-        message: insertWalletError.message,
-        context: { transactionId, sellerId: tx.seller_id, sessionId },
-      });
-      throw new Error(`Wallet insert failed: ${insertWalletError.message}`);
-    }
-    return;
-  }
-
-  const { error: walletError } = await admin
-    .from("wallets")
-    .update({
-      pending_balance: roundMoney(Number(wallet.pending_balance) + sellerCredit),
-    })
-    .eq("user_id", wallet.user_id);
+  const { error: walletError } = await admin.rpc("credit_seller_wallet", {
+    p_user_id: tx.seller_id,
+    p_amount: sellerCredit,
+  });
 
   if (walletError) {
     logError({
-      event: "stripe_mark_paid_wallet_update_failed",
+      event: "stripe_mark_paid_wallet_credit_failed",
       message: walletError.message,
       context: { transactionId, sellerId: tx.seller_id, sessionId },
     });
-    throw new Error(`Wallet update failed: ${walletError.message}`);
+    throw new Error(`Wallet credit failed: ${walletError.message}`);
   }
+
+  return true;
 }
 
 async function persistShippingAddressIfPresent(
@@ -319,7 +288,8 @@ export async function applyPaidCheckoutSession(
   transactionId: string,
   session: Stripe.Checkout.Session,
 ): Promise<void> {
-  await markPaid(transactionId, session.id);
+  const transitioned = await markPaid(transactionId, session.id);
+  if (!transitioned) return;
   await sendTransactionEmailsIfPaid(transactionId, session);
   await ensureTransactionConversation(transactionId);
 }

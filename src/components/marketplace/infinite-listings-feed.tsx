@@ -142,7 +142,7 @@ export function InfiniteListingsFeed({
 
   useEffect(() => {
     const target = sentinelRef.current;
-    if (!target || !hasNextPage) return;
+    if (!target || !hasNextPage || isFetchingNextPage || status === "error") return;
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting)) {
@@ -153,7 +153,7 @@ export function InfiniteListingsFeed({
     );
     observer.observe(target);
     return () => observer.disconnect();
-  }, [hasNextPage, loadMore]);
+  }, [hasNextPage, isFetchingNextPage, status, loadMore]);
 
   const loadError =
     status === "error" && error instanceof Error ? error.message : null;
@@ -187,7 +187,18 @@ export function InfiniteListingsFeed({
       <div ref={sentinelRef} className="h-4 w-full" />
 
       {loadError ? (
-        <p className="text-destructive text-center text-sm">{loadError}</p>
+        <div className="flex flex-col items-center gap-2">
+          <p className="text-destructive text-center text-sm">{loadError}</p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => loadMore()}
+            disabled={isFetchingNextPage}
+          >
+            Réessayer
+          </Button>
+        </div>
       ) : null}
 
       {hasNextPage ? (

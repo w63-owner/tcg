@@ -1,0 +1,126 @@
+-- Fix keyset cursor comparisons:
+-- 1. DESC sorts used tuple < which is wrong with mixed ASC/DESC ORDER BY (id ASC tiebreaker)
+-- 2. COALESCE(-1) was inconsistent with NULLS LAST in ORDER BY
+-- 3. Escape LIKE wildcards in user search input
+CREATE OR REPLACE FUNCTION public.search_listings_feed(
+  p_q text DEFAULT NULL,
+  p_set text DEFAULT NULL,
+  p_rarity text DEFAULT NULL,
+  p_condition text DEFAULT NULL,
+  p_is_graded boolean DEFAULT NULL,
+  p_grade_min numeric DEFAULT NULL,
+  p_grade_max numeric DEFAULT NULL,
+  p_price_min numeric DEFAULT NULL,
+  p_price_max numeric DEFAULT NULL,
+  p_sort text DEFAULT 'date_desc',
+  p_cursor_id uuid DEFAULT NULL,
+  p_cursor_created_at timestamptz DEFAULT NULL,
+  p_cursor_display_price numeric DEFAULT NULL,
+  p_cursor_grade_note numeric DEFAULT NULL,
+  p_limit integer DEFAULT 41,
+  p_exclude_seller_id uuid DEFAULT NULL
+)
+RETURNS TABLE (
+  id uuid,
+  title text,
+  cover_image_url text,
+  price_seller numeric,
+  display_price numeric,
+  condition text,
+  is_graded boolean,
+  grading_company text,
+  grade_note numeric,
+  card_ref_id text,
+  created_at timestamptz,
+  language text,
+  favorite_count bigint
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_limit integer := LEAST(GREATEST(COALESCE(p_limit, 41), 1), 50);
+  v_q text;
+BEGIN
+  -- Escape LIKE wildcards in user input
+  IF p_q IS NOT NULL AND p_q <> '' THEN
+    v_q := replace(replace(replace(p_q, '\', '\\'), '%', '\%'), '_', '\_');
+  ELSE
+    v_q := NULL;
+  END IF;
+
+  RETURN QUERY
+  SELECT
+    l.id,
+    l.title,
+    l.cover_image_url,
+    l.price_seller,
+    l.display_price,
+    l.condition::text,
+    l.is_graded,
+    l.grading_company::text,
+    l.grade_note,
+    l.card_ref_id::text,
+    l.created_at,
+    c.language::text,
+    (SELECT count(*)::bigint FROM public.favorite_listings fl WHERE fl.listing_id = l.id) AS favorite_count
+  FROM public.listings l
+  LEFT JOIN public.tcgdex_cards c ON c.card_key = l.card_ref_id
+  WHERE l.status = 'ACTIVE'
+    AND (p_exclude_seller_id IS NULL OR l.seller_id <> p_exclude_seller_id)
+    AND (p_condition IS NULL OR p_condition = '' OR l.condition::text = p_condition)
+    AND (p_is_graded IS NULL OR l.is_graded = p_is_graded)
+    AND (p_grade_min IS NULL OR l.grade_note >= p_grade_min)
+    AND (p_grade_max IS NULL OR l.grade_note <= p_grade_max)
+    AND (p_price_min IS NULL OR l.display_price >= p_price_min)
+    AND (p_price_max IS NULL OR l.display_price <= p_price_max)
+    AND (p_set IS NULL OR p_set = '' OR c.set_name = p_set)
+    AND (p_rarity IS NULL OR p_rarity = '' OR c.rarity = p_rarity)
+    AND (
+      v_q IS NULL
+      OR l.title ILIKE '%' || v_q || '%'
+      OR (
+        coalesce(c.name, '') || ' ' || coalesce(c.set_id, '') || ' ' || coalesce(c.set_name, '') || ' ' || coalesce(c.id, '') || ' ' || coalesce(c.local_id, '') || ' ' || coalesce(c.language, '')
+      ) ILIKE '%' || v_q || '%'
+    )
+    AND (
+      p_cursor_id IS NULL
+      OR (
+        CASE
+          -- date_desc: ORDER BY created_at DESC, id ASC → explicit OR for mixed direction
+          WHEN p_sort = 'date_desc' OR p_sort IS NULL OR p_sort = '' THEN
+            l.created_at < p_cursor_created_at
+            OR (l.created_at = p_cursor_created_at AND l.id > p_cursor_id)
+          -- date_asc: ORDER BY created_at ASC, id ASC → tuple > works (both ASC)
+          WHEN p_sort = 'date_asc' THEN
+            (l.created_at, l.id) > (p_cursor_created_at, p_cursor_id)
+          -- price_desc: ORDER BY display_price DESC NULLS LAST, id ASC
+          WHEN p_sort = 'price_desc' THEN
+            COALESCE(l.display_price, '-Infinity'::numeric) < COALESCE(p_cursor_display_price, '-Infinity'::numeric)
+            OR (COALESCE(l.display_price, '-Infinity'::numeric) = COALESCE(p_cursor_display_price, '-Infinity'::numeric) AND l.id > p_cursor_id)
+          -- price_asc: ORDER BY display_price ASC NULLS LAST, id ASC
+          WHEN p_sort = 'price_asc' THEN
+            (COALESCE(l.display_price, 'Infinity'::numeric), l.id) > (COALESCE(p_cursor_display_price, 'Infinity'::numeric), p_cursor_id)
+          -- grade_desc: ORDER BY grade_note DESC NULLS LAST, id ASC
+          WHEN p_sort = 'grade_desc' THEN
+            COALESCE(l.grade_note, '-Infinity'::numeric) < COALESCE(p_cursor_grade_note, '-Infinity'::numeric)
+            OR (COALESCE(l.grade_note, '-Infinity'::numeric) = COALESCE(p_cursor_grade_note, '-Infinity'::numeric) AND l.id > p_cursor_id)
+          -- grade_asc: ORDER BY grade_note ASC NULLS LAST, id ASC
+          WHEN p_sort = 'grade_asc' THEN
+            (COALESCE(l.grade_note, 'Infinity'::numeric), l.id) > (COALESCE(p_cursor_grade_note, 'Infinity'::numeric), p_cursor_id)
+          ELSE
+            l.created_at < p_cursor_created_at
+            OR (l.created_at = p_cursor_created_at AND l.id > p_cursor_id)
+        END
+      )
+    )
+  ORDER BY
+    CASE WHEN p_sort = 'price_asc' THEN l.display_price END ASC NULLS LAST,
+    CASE WHEN p_sort = 'price_desc' THEN l.display_price END DESC NULLS LAST,
+    CASE WHEN p_sort = 'grade_asc' THEN l.grade_note END ASC NULLS LAST,
+    CASE WHEN p_sort = 'grade_desc' THEN l.grade_note END DESC NULLS LAST,
+    CASE WHEN p_sort = 'date_asc' THEN l.created_at END ASC,
+    CASE WHEN p_sort = 'date_desc' OR p_sort IS NULL OR p_sort = '' THEN l.created_at END DESC,
+    l.id ASC
+  LIMIT v_limit;
+END;
+$$;

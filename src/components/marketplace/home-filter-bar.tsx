@@ -63,7 +63,6 @@ function FilterFields({
   useEffect(() => {
     if (debouncedQuery === query) return;
     const next = new URLSearchParams(searchParams);
-    next.delete("page");
     if (debouncedQuery.trim()) {
       next.set("q", debouncedQuery);
     } else {
@@ -193,7 +192,6 @@ export function HomeFilterBar(props: HomeFilterBarProps) {
           key={`${props.setFilter}|${props.condition}|${props.isGraded}|${props.sort}`}
           {...props}
         />
-        <input type="hidden" name="page" value="1" />
         <Button type="submit">Rechercher</Button>
       </form>
     </div>

@@ -28,16 +28,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data: conversation } = await supabase
-    .from("conversations")
-    .select("id")
-    .eq("id", conversationId)
-    .maybeSingle<{ id: string }>();
-
-  if (
-    !conversation ||
-    !(await isParticipant(supabase, conversationId, user.id))
-  ) {
+  if (!(await isParticipant(supabase, conversationId, user.id))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -62,6 +53,7 @@ export async function GET(request: NextRequest) {
   return new NextResponse(data, {
     headers: {
       "Content-Type": contentType,
+      "X-Content-Type-Options": "nosniff",
       "Cache-Control": "private, max-age=3600",
     },
   });

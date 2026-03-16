@@ -191,14 +191,16 @@ export function MessagesConversationProvider({
 
   const addMessage = useCallback(
     (newMsg: ThreadMessage) => {
+      const optimisticId = lastOptimisticIdRef.current;
+      if (optimisticId && newMsg.sender_id === currentUserId) {
+        lastOptimisticIdRef.current = null;
+      }
       setMessages((prev) => {
-        const optimisticId = lastOptimisticIdRef.current;
         if (
           optimisticId &&
           newMsg.sender_id === currentUserId &&
           prev.some((m) => m.id === optimisticId)
         ) {
-          lastOptimisticIdRef.current = null;
           return prev.map((m) => (m.id === optimisticId ? newMsg : m));
         }
         const existingIdx = prev.findIndex((m) => m.id === newMsg.id);

@@ -159,6 +159,14 @@ export async function markConversationReadAction(formData: FormData) {
     return;
   }
 
+  const { data: conv } = await supabase
+    .from("conversations")
+    .select("buyer_id, seller_id")
+    .eq("id", conversationId)
+    .maybeSingle<{ buyer_id: string; seller_id: string }>();
+
+  if (!conv || (conv.buyer_id !== user.id && conv.seller_id !== user.id)) return;
+
   await supabase
     .from("messages")
     .update({ read_at: new Date().toISOString() })
@@ -247,12 +255,16 @@ export async function fetchOlderMessages(
 
   const { data: conversation } = await supabase
     .from("conversations")
-    .select("id")
+    .select("id, buyer_id, seller_id")
     .eq("id", conversationId)
-    .maybeSingle<{ id: string }>();
+    .maybeSingle<{ id: string; buyer_id: string; seller_id: string }>();
 
   if (!conversation) {
     return { ok: false, error: "Conversation introuvable." };
+  }
+
+  if (conversation.buyer_id !== user.id && conversation.seller_id !== user.id) {
+    return { ok: false, error: "Accès refusé." };
   }
 
   const { data: messages, error } = await supabase
@@ -311,12 +323,16 @@ export async function fetchMessagesAfter(
 
   const { data: conversation } = await supabase
     .from("conversations")
-    .select("id")
+    .select("id, buyer_id, seller_id")
     .eq("id", conversationId)
-    .maybeSingle<{ id: string }>();
+    .maybeSingle<{ id: string; buyer_id: string; seller_id: string }>();
 
   if (!conversation) {
     return { ok: false, error: "Conversation introuvable." };
+  }
+
+  if (conversation.buyer_id !== user.id && conversation.seller_id !== user.id) {
+    return { ok: false, error: "Accès refusé." };
   }
 
   const { data: messages, error } = await supabase
@@ -324,7 +340,8 @@ export async function fetchMessagesAfter(
     .select("id, sender_id, content, created_at, read_at, message_type, offer_id, metadata, offer:offers(id, offer_amount, status, buyer_id, listing_id)")
     .eq("conversation_id", conversationId)
     .gt("created_at", afterDate)
-    .order("created_at", { ascending: true });
+    .order("created_at", { ascending: true })
+    .limit(200);
 
   if (error) {
     logError({
@@ -365,6 +382,14 @@ export async function markMessagesAsReadAction(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return;
+
+  const { data: conv } = await supabase
+    .from("conversations")
+    .select("buyer_id, seller_id")
+    .eq("id", conversationId)
+    .maybeSingle<{ buyer_id: string; seller_id: string }>();
+
+  if (!conv || (conv.buyer_id !== user.id && conv.seller_id !== user.id)) return;
 
   await supabase
     .from("messages")

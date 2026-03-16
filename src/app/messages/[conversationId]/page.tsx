@@ -211,7 +211,7 @@ export default async function MessagesThreadPage({
   const showReceiptConfirmBar = Boolean(isBuyer && shippedTransaction);
 
   return (
-    <section className="fixed inset-x-0 bottom-0 top-14 md:top-16 flex flex-col overflow-hidden">
+    <section className="fixed inset-x-0 bottom-0 top-0 md:top-16 flex flex-col overflow-hidden">
       <MessagesConversationProvider
         key={conversation.id}
         initialMessages={rows}
@@ -230,8 +230,8 @@ export default async function MessagesThreadPage({
             />
           </div>
 
-          <div className="flex-1 overflow-hidden relative min-h-0">
-            <div className="absolute inset-0 pt-3">
+          <div className="flex-1 overflow-hidden min-h-0 relative">
+            <div className="absolute inset-0 pt-1 flex flex-col">
               <ConversationThreadConnected
                 conversationId={conversation.id}
                 currentUserId={user.id}

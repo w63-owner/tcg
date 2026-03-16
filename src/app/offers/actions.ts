@@ -80,7 +80,8 @@ export async function respondToOfferAction(formData: FormData) {
           reserved_for: fullOffer.buyer_id,
           reserved_price: fullOffer.offer_amount,
         })
-        .eq("id", fullOffer.listing_id);
+        .eq("id", fullOffer.listing_id)
+        .in("status", ["ACTIVE"]);
     }
 
     const { data: convId } = await supabase.rpc("ensure_conversation_for_offer", {

@@ -98,12 +98,7 @@ export async function POST(request: Request) {
       message: error instanceof Error ? error.message : "invalid signature",
     });
     return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Invalid webhook signature",
-      },
+      { error: "Invalid webhook signature" },
       { status: 400 },
     );
   }
@@ -116,13 +111,13 @@ export async function POST(request: Request) {
 
   if (isPaymentOrCancellationEvent) {
     const admin = createAdminClient();
-    const { data: existing } = await admin
+    const { data: inserted } = await admin
       .from("stripe_webhooks_processed")
+      .insert({ stripe_event_id: event.id, event_type: event.type })
       .select("stripe_event_id")
-      .eq("stripe_event_id", event.id)
       .maybeSingle();
 
-    if (existing) {
+    if (!inserted) {
       logInfo({
         event: "stripe_webhook_idempotent_skip",
         context: { eventId: event.id, eventType: event.type },
@@ -162,16 +157,6 @@ export async function POST(request: Request) {
       if (transactionId) {
         await markCancelled(transactionId, session.id);
       }
-    }
-
-    if (isPaymentOrCancellationEvent) {
-      const admin = createAdminClient();
-      await admin
-        .from("stripe_webhooks_processed")
-        .upsert(
-          { stripe_event_id: event.id, event_type: event.type },
-          { onConflict: "stripe_event_id", ignoreDuplicates: true },
-        );
     }
 
     logInfo({

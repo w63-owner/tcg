@@ -62,9 +62,9 @@ function useReadReceiptBatcher(conversationId: string) {
 
   useEffect(() => {
     return () => {
-      if (flushTimeoutRef.current) clearTimeout(flushTimeoutRef.current);
+      flush();
     };
-  }, []);
+  }, [flush]);
 
   return markAsReadWhenVisible;
 }
@@ -310,9 +310,8 @@ export function ConversationThread({
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const topSentinelRef = useRef<HTMLDivElement | null>(null);
-  const lastScrollYRef = useRef(0);
+  const hasScrolledOnceRef = useRef(false);
   const {
-    setHeaderVisible,
     retrySendRef,
     removeOptimisticMessage,
     prependMessages,
@@ -325,6 +324,7 @@ export function ConversationThread({
   } = useMessagesConversation();
 
   const scrollHeightBeforePrependRef = useRef<number>(0);
+  const isPrependingRef = useRef(false);
   const markAsReadWhenVisible = useReadReceiptBatcher(conversationId);
 
   const loadOlder = useCallback(async () => {
@@ -340,6 +340,7 @@ export function ConversationThread({
         return;
       }
       const normalized = result.messages.map(normalizeMessageRow);
+      isPrependingRef.current = true;
       prependMessages(normalized);
       if (result.hasMore === false) setHasMore(false);
     } finally {
@@ -356,8 +357,11 @@ export function ConversationThread({
   ]);
 
   useEffect(() => {
+    if (isPrependingRef.current) return;
     const timeoutId = setTimeout(() => {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+      const isInitial = !hasScrolledOnceRef.current;
+      bottomRef.current?.scrollIntoView({ behavior: isInitial ? "instant" : "smooth", block: "end" });
+      hasScrolledOnceRef.current = true;
     }, 150);
     return () => clearTimeout(timeoutId);
   }, [messages.length]);
@@ -384,27 +388,10 @@ export function ConversationThread({
       const delta = viewport.scrollHeight - prevHeight;
       if (delta > 0) viewport.scrollTop += delta;
       scrollHeightBeforePrependRef.current = 0;
+      isPrependingRef.current = false;
     }
   }, [messages.length]);
 
-  useEffect(() => {
-    const el = viewportRef.current;
-    if (!el) return;
-    const handleScroll = () => {
-      const y = el.scrollTop;
-      const prev = lastScrollYRef.current;
-      lastScrollYRef.current = y;
-      if (y <= 10) {
-        setHeaderVisible(true);
-      } else if (y > prev) {
-        setHeaderVisible(false);
-      } else if (y < prev) {
-        setHeaderVisible(true);
-      }
-    };
-    el.addEventListener("scroll", handleScroll, { passive: true });
-    return () => el.removeEventListener("scroll", handleScroll);
-  }, [setHeaderVisible]);
 
   const rows = useMemo(() => {
     return messages.map((message, index) => {
