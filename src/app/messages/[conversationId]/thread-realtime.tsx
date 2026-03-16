@@ -7,7 +7,7 @@ import {
   normalizeRealtimeMessage,
   type ThreadMessage,
 } from "./messages-conversation-state";
-import { fetchMessagesSince } from "@/app/messages/actions";
+import { fetchMessagesSince, getAcceptedOfferIdForConversation } from "@/app/messages/actions";
 import type { FetchOlderMessagesRow } from "@/app/messages/actions";
 
 type ThreadRealtimeProps = {
@@ -41,6 +41,7 @@ export function ThreadRealtime({
     messages,
     setConnectionStatus,
     mergeMissedMessages,
+    setAcceptedOfferId,
   } = useMessagesConversation();
   const addMessageRef = useRef(addMessage);
   addMessageRef.current = addMessage;
@@ -48,6 +49,8 @@ export function ThreadRealtime({
   updateMessageReadAtRef.current = updateMessageReadAt;
   const mergeMissedMessagesRef = useRef(mergeMissedMessages);
   mergeMissedMessagesRef.current = mergeMissedMessages;
+  const setAcceptedOfferIdRef = useRef(setAcceptedOfferId);
+  setAcceptedOfferIdRef.current = setAcceptedOfferId;
   const currentUserIdRef = useRef(currentUserId);
   currentUserIdRef.current = currentUserId;
   const messagesRef = useRef(messages);
@@ -71,6 +74,30 @@ export function ThreadRealtime({
           if (raw && typeof raw === "object") {
             const msg = normalizeRealtimeMessage(raw);
             addMessageRef.current(msg);
+            if (raw.message_type === "system") {
+              const meta = msg.metadata as { type?: string } | undefined;
+              if (meta?.type === "offer_accepted" && raw.sender_id !== currentUserIdRef.current) {
+                const msgs = messagesRef.current;
+                const offerMsg = [...msgs].reverse().find(
+                  (m) => m.message_type === "offer" && m.sender_id === currentUserIdRef.current && m.offer_id,
+                );
+                if (offerMsg?.offer_id) {
+                  setAcceptedOfferIdRef.current(offerMsg.offer_id);
+                } else {
+                  // Fallback: offer message not yet in list (race condition), fetch from server
+                  void getAcceptedOfferIdForConversation(conversationId).then((id) => {
+                    if (id) setAcceptedOfferIdRef.current(id);
+                  });
+                }
+              } else if (
+                meta?.type === "offer_cancelled_by_buyer" ||
+                meta?.type === "payment_completed" ||
+                meta?.type === "sale_completed"
+              ) {
+                // Clear for all tabs regardless of who sent the message
+                setAcceptedOfferIdRef.current(null);
+              }
+            }
           }
         },
       )
@@ -107,9 +134,32 @@ export function ThreadRealtime({
                       result.messages &&
                       result.messages.length > 0
                     ) {
-                      mergeMissedMessagesRef.current(
-                        result.messages.map(normalizeMessageRow),
-                      );
+                      const normalized = result.messages.map(normalizeMessageRow);
+                      mergeMissedMessagesRef.current(normalized);
+                      for (const m of normalized) {
+                        if (m.message_type === "system") {
+                          const meta = m.metadata as { type?: string } | undefined;
+                          if (meta?.type === "offer_accepted" && m.sender_id !== currentUserIdRef.current) {
+                            const msgs = messagesRef.current;
+                            const offerMsg = [...msgs].reverse().find(
+                              (o) => o.message_type === "offer" && o.sender_id === currentUserIdRef.current && o.offer_id,
+                            );
+                            if (offerMsg?.offer_id) {
+                              setAcceptedOfferIdRef.current(offerMsg.offer_id);
+                            } else {
+                              void getAcceptedOfferIdForConversation(conversationId).then((id) => {
+                                if (id) setAcceptedOfferIdRef.current(id);
+                              });
+                            }
+                          } else if (
+                            meta?.type === "offer_cancelled_by_buyer" ||
+                            meta?.type === "payment_completed" ||
+                            meta?.type === "sale_completed"
+                          ) {
+                            setAcceptedOfferIdRef.current(null);
+                          }
+                        }
+                      }
                     }
                     wasDisconnectedRef.current = false;
                     setConnectionStatus("connected");

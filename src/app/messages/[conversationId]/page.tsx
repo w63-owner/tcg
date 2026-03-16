@@ -7,11 +7,11 @@ import { ConversationThreadConnected } from "./conversation-thread";
 import { MessagesConversationProvider } from "./messages-conversation-state";
 import { OfferModal } from "./offer-modal";
 import { AcceptOfferForm } from "./accept-offer-form";
-import { cancelSentOfferAction } from "@/app/offers/actions";
-import { BuyReservedForm } from "./buy-reserved-form";
+import { CancelOfferForm } from "./cancel-offer-form";
+import { BuyBarClient } from "./buy-bar-client";
+import { OfferBarClient } from "./offer-bar-client";
 import { TrackingCard } from "./receipt-action-client";
 import { ShippingModalTrigger } from "@/app/profile/sales/shipping-modal-client";
-
 export const dynamic = "force-dynamic";
 export const fetchCache = "force-no-store";
 
@@ -171,7 +171,10 @@ export default async function MessagesThreadPage({
   const isSeller = user.id === conversation.seller_id;
   const isBuyer = user.id === conversation.buyer_id;
   const listingAvailableForOffer =
-    listing && listing.status !== "SOLD" && listing.status !== "LOCKED";
+    listing &&
+    listing.status !== "SOLD" &&
+    listing.status !== "LOCKED" &&
+    listing.status !== "RESERVED";
   const listingAlreadySold = listing?.status === "SOLD";
   const showOfferButton =
     canOffer && !hasPendingOfferFromBuyer && Boolean(listingAvailableForOffer);
@@ -218,6 +221,7 @@ export default async function MessagesThreadPage({
         conversationId={conversation.id}
         currentUserId={user.id}
         initialHasMore={rows.length >= 50}
+        initialAcceptedOfferId={acceptedOfferId}
       >
         <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
           <ThreadRealtime conversationId={conversation.id} currentUserId={user.id} />
@@ -254,31 +258,24 @@ export default async function MessagesThreadPage({
             </div>
           ) : null}
           {showOfferBar ? (
-            <div className="py-2">
-              <OfferModal
-                conversationId={conversation.id}
-                listingId={listing!.id}
-                listingTitle={listing!.title}
-                listingCoverUrl={listing!.cover_image_url ?? undefined}
-                basePrice={basePrice}
-                canOffer={true}
-              />
-            </div>
+            <OfferBarClient>
+              <div className="py-2">
+                <OfferModal
+                  conversationId={conversation.id}
+                  listingId={listing!.id}
+                  listingTitle={listing!.title}
+                  listingCoverUrl={listing!.cover_image_url ?? undefined}
+                  basePrice={basePrice}
+                  canOffer={true}
+                />
+              </div>
+            </OfferBarClient>
           ) : null}
-          {showBuyReservedBar ? (
-            <div className="flex flex-nowrap items-center gap-2 py-2">
-              <BuyReservedForm offerId={acceptedOfferId!} />
-              <form action={cancelSentOfferAction}>
-                <input type="hidden" name="offer_id" value={acceptedOfferId!} />
-                <button
-                  type="submit"
-                  className="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
-                >
-                  Annuler mon offre
-                </button>
-              </form>
-            </div>
-          ) : null}
+          <BuyBarClient
+            isSeller={isSeller}
+            hasPaidTransaction={hasPaidTransaction}
+            listingAlreadySold={listingAlreadySold}
+          />
           {showReceiptConfirmBar && shippedTransaction ? (
             <div className="py-2">
               <TrackingCard transaction={shippedTransaction} />

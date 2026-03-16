@@ -678,3 +678,23 @@ export async function submitOfferFromConversationAction(
   });
   return { ok: true };
 }
+
+export async function getAcceptedOfferIdForConversation(
+  conversationId: string,
+): Promise<string | null> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data } = await supabase
+    .from("offers")
+    .select("id")
+    .eq("conversation_id", conversationId)
+    .eq("buyer_id", user.id)
+    .eq("status", "ACCEPTED")
+    .maybeSingle<{ id: string }>();
+
+  return data?.id ?? null;
+}

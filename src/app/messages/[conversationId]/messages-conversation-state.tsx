@@ -60,6 +60,8 @@ type MessagesConversationContextValue = {
   connectionStatus: "connected" | "reconnecting" | "disconnected";
   setConnectionStatus: (status: MessagesConversationContextValue["connectionStatus"]) => void;
   mergeMissedMessages: (newMessages: ThreadMessage[]) => void;
+  acceptedOfferId: string | null;
+  setAcceptedOfferId: (id: string | null) => void;
 };
 
 const MessagesConversationContext =
@@ -140,6 +142,7 @@ type MessagesConversationProviderProps = {
   conversationId: string;
   currentUserId: string;
   initialHasMore?: boolean;
+  initialAcceptedOfferId?: string | null;
   children: ReactNode;
 };
 
@@ -148,6 +151,7 @@ export function MessagesConversationProvider({
   conversationId,
   currentUserId,
   initialHasMore = true,
+  initialAcceptedOfferId = null,
   children,
 }: MessagesConversationProviderProps) {
   const [messages, setMessages] = useState<ThreadMessage[]>(initialMessages);
@@ -156,6 +160,7 @@ export function MessagesConversationProvider({
   const [isCounterpartTyping, setIsCounterpartTyping] = useState(false);
   const [headerVisible, setHeaderVisible] = useState(true);
   const [connectionStatus, setConnectionStatus] = useState<MessagesConversationContextValue["connectionStatus"]>("connected");
+  const [acceptedOfferId, setAcceptedOfferId] = useState<string | null>(initialAcceptedOfferId);
   const lastOptimisticIdRef = useRef<string | null>(null);
   const retrySendRef = useRef<((content: string) => Promise<void>) | null>(null);
 
@@ -287,6 +292,8 @@ export function MessagesConversationProvider({
 
   const value: MessagesConversationContextValue = {
     messages,
+    acceptedOfferId,
+    setAcceptedOfferId,
     addMessage,
     appendMessages,
     addOptimisticMessage,

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { logError, logInfo } from "@/lib/observability";
 import { requireAuthenticatedUser } from "@/lib/auth/require-authenticated-user";
 import {
@@ -150,7 +151,9 @@ export async function cancelSentOfferAction(formData: FormData) {
     return;
   }
 
-  await supabase
+  const admin = createAdminClient();
+
+  await admin
     .from("offers")
     .update({ status: "CANCELLED" })
     .eq("id", offerId)
@@ -158,7 +161,7 @@ export async function cancelSentOfferAction(formData: FormData) {
     .in("status", ["PENDING", "ACCEPTED"]);
 
   if (offer.status === "ACCEPTED") {
-    await supabase
+    await admin
       .from("listings")
       .update({
         status: "ACTIVE",
