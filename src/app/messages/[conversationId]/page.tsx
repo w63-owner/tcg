@@ -11,7 +11,7 @@ import { CancelOfferForm } from "./cancel-offer-form";
 import { BuyBarClient } from "./buy-bar-client";
 import { OfferBarClient } from "./offer-bar-client";
 import { TrackingCard } from "./receipt-action-client";
-import { ShippingModalTrigger } from "@/app/profile/sales/shipping-modal-client";
+import { ShippingButtonReactive } from "./shipping-button-reactive";
 export const dynamic = "force-dynamic";
 export const fetchCache = "force-no-store";
 
@@ -204,7 +204,6 @@ export default async function MessagesThreadPage({
     shippedTransaction = txRow ?? null;
   }
 
-  const showShippingButton = Boolean(isSeller && paidTransactionRow?.id);
   const showOfferBar = Boolean(
     listing && basePrice > 0 && showOfferButton,
   );
@@ -249,14 +248,10 @@ export default async function MessagesThreadPage({
       {/* Barre fixe en bas : boutons d’action puis zone de texte tout en bas de l’écran */}
       <div className="shrink-0 flex flex-col bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-t">
         <div className="mx-auto flex w-full max-w-7xl flex-col px-4 md:px-6">
-          {showShippingButton ? (
-            <div className="py-2">
-              <ShippingModalTrigger
-                transactionId={paidTransactionRow!.id}
-                triggerClassName="w-full"
-              />
-            </div>
-          ) : null}
+          <ShippingButtonReactive
+            isSeller={isSeller}
+            serverTransactionId={paidTransactionRow?.id ?? null}
+          />
           {showOfferBar ? (
             <OfferBarClient>
               <div className="py-2">

@@ -118,6 +118,7 @@ export function normalizeRealtimeMessage(payload: Record<string, unknown>): Thre
         offer_amount: typeof m.offer_amount === "number" ? m.offer_amount : undefined,
         total_amount: typeof m.total_amount === "number" ? m.total_amount : undefined,
         seller_credit: typeof m.seller_credit === "number" ? m.seller_credit : undefined,
+        transaction_id: typeof m.transaction_id === "string" ? m.transaction_id : undefined,
       };
     } else if (m.image_url && typeof m.image_url === "string") {
       metadata = { image_url: m.image_url };

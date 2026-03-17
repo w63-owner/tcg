@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
   useMessagesConversation,
@@ -9,6 +10,8 @@ import {
 } from "./messages-conversation-state";
 import { fetchMessagesSince, getAcceptedOfferIdForConversation } from "@/app/messages/actions";
 import type { FetchOlderMessagesRow } from "@/app/messages/actions";
+
+const SERVER_REFRESH_TYPES = new Set(["payment_completed", "order_shipped", "sale_completed"]);
 
 type ThreadRealtimeProps = {
   conversationId: string;
@@ -56,6 +59,9 @@ export function ThreadRealtime({
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
   const wasDisconnectedRef = useRef(false);
+  const router = useRouter();
+  const routerRef = useRef(router);
+  routerRef.current = router;
 
   useEffect(() => {
     const supabase = createClient();
@@ -76,6 +82,9 @@ export function ThreadRealtime({
             addMessageRef.current(msg);
             if (raw.message_type === "system") {
               const meta = msg.metadata as { type?: string } | undefined;
+              if (meta?.type && SERVER_REFRESH_TYPES.has(meta.type)) {
+                routerRef.current.refresh();
+              }
               if (meta?.type === "offer_accepted" && raw.sender_id !== currentUserIdRef.current) {
                 const msgs = messagesRef.current;
                 const offerMsg = [...msgs].reverse().find(
@@ -129,6 +138,7 @@ export function ThreadRealtime({
                 setConnectionStatus("reconnecting");
                 void fetchMessagesSince(conversationId, lastCreatedAt)
                   .then((result) => {
+                    let needsServerRefresh = false;
                     if (
                       result.ok &&
                       result.messages &&
@@ -139,6 +149,9 @@ export function ThreadRealtime({
                       for (const m of normalized) {
                         if (m.message_type === "system") {
                           const meta = m.metadata as { type?: string } | undefined;
+                          if (meta?.type && SERVER_REFRESH_TYPES.has(meta.type)) {
+                            needsServerRefresh = true;
+                          }
                           if (meta?.type === "offer_accepted" && m.sender_id !== currentUserIdRef.current) {
                             const msgs = messagesRef.current;
                             const offerMsg = [...msgs].reverse().find(
@@ -161,6 +174,7 @@ export function ThreadRealtime({
                         }
                       }
                     }
+                    if (needsServerRefresh) routerRef.current.refresh();
                     wasDisconnectedRef.current = false;
                     setConnectionStatus("connected");
                   })

@@ -9,6 +9,7 @@ export type SystemMessageMetadata = {
   offer_amount?: number;
   total_amount?: number;
   seller_credit?: number;
+  transaction_id?: string;
 } | null;
 
 /** Image message metadata (stored in metadata when message_type === 'image') */
